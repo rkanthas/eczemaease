@@ -1,0 +1,2354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>EczemaEase – Baby & Kids Eczema Manager</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #e9e4f5; }
+    .app-shell { max-width: 430px; margin: 0 auto; min-height: 100vh; background: #fafafa; position: relative; box-shadow: 0 0 40px rgba(0,0,0,0.15); overflow: hidden; }
+    ::-webkit-scrollbar { width: 0; }
+    .slide-up   { animation: slideUp  0.3s ease both; }
+    .pop-in     { animation: popIn    0.3s cubic-bezier(.34,1.56,.64,1) both; }
+    .fade-in    { animation: fadeIn   0.35s ease both; }
+    .sheet-up   { animation: sheetUp  0.35s cubic-bezier(.32,0,.67,0) both; }
+    @keyframes slideUp  { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes popIn    { from{opacity:0;transform:scale(0.85)} to{opacity:1;transform:scale(1)} }
+    @keyframes fadeIn   { from{opacity:0} to{opacity:1} }
+    @keyframes sheetUp  { from{opacity:0;transform:translateY(100%)} to{opacity:1;transform:translateY(0)} }
+    @keyframes bounceDot { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-8px)} }
+    .dot { animation:bounceDot 1.2s ease infinite; display:inline-block; width:8px; height:8px; border-radius:50%; background:#a78bfa; margin:0 2px; }
+    .dot:nth-child(2){animation-delay:.15s} .dot:nth-child(3){animation-delay:.30s}
+    input[type=range] { -webkit-appearance:none; appearance:none; height:10px; border-radius:9999px; outline:none; cursor:pointer; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:24px; height:24px; border-radius:50%; background:#7C3AED; cursor:pointer; border:3px solid white; box-shadow:0 2px 6px rgba(0,0,0,.25); }
+    .scan-line { animation: scanLine 1.5s ease-in-out infinite alternate; position:absolute; }
+    @keyframes scanLine { from{top:6px} to{top:calc(100% - 6px)} }
+    button { cursor:pointer; border:none; background:none; }
+    textarea, input, select { font-family:inherit; }
+    .no-scroll::-webkit-scrollbar { display:none; }
+    .ring-pulse { animation: ringPulse 2s ease infinite; }
+    @keyframes ringPulse { 0%,100%{box-shadow:0 0 0 0 rgba(255,255,255,0.4)} 50%{box-shadow:0 0 0 10px rgba(255,255,255,0)} }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+/* ═══════════════════════════════════════════
+   CONSTANTS
+═══════════════════════════════════════════ */
+const BODY_AREAS = [
+  'Face / Cheeks','Scalp','Neck','Chest','Upper Back',
+  'Elbow Creases','Wrists','Hands','Tummy',
+  'Nappy Area','Behind Knees','Ankles & Feet','Legs','Arms',
+];
+const TRIGGERS = [
+  '🌡️ Heat','💦 Sweat','🧴 New Product','👕 Fabric',
+  '🍎 Food','🐾 Pet Hair','🌿 Grass / Pollen','😰 Stress',
+  '💨 Dry Air','🏊 Swimming','🛁 Bathing','🦷 Teething','😴 Tiredness',
+];
+const MOODS = [
+  {emoji:'😊',label:'Happy'},{emoji:'😐',label:'Okay'},
+  {emoji:'😢',label:'Upset'},{emoji:'😤',label:'Crying'},{emoji:'😴',label:'Tired'},
+];
+const APPT_TYPES  = ['GP','Dermatologist','Allergy Specialist','Nurse','Pharmacist','Other'];
+const APPT_EMOJI  = {GP:'👨‍⚕️',Dermatologist:'🔬','Allergy Specialist':'🧪',Nurse:'💉',Pharmacist:'💊',Other:'🏥'};
+const RELATIONSHIPS = ['Daughter','Son','Self','Partner','Sibling','Other'];
+
+const PROFILE_COLORS = [
+  '#7C3AED','#4F46E5','#0EA5E9','#10B981',
+  '#F59E0B','#EF4444','#EC4899','#8B5CF6',
+];
+const PROFILE_EMOJIS = [
+  '👶','🧒','👦','👧','🧑','👨','👩','🧓',
+  '⭐','🌈','🦋','🐣','🌸','🦁','🐼','🐨','🦊','🎀',
+];
+
+/* ═══════════════════════════════════════════
+   SEED DATA
+═══════════════════════════════════════════ */
+const SEED_PROFILES = [
+  {
+    id: 1, name: 'Maya', emoji: '👧', age: '2 years', relationship: 'Daughter', color: '#7C3AED',
+    logs: [
+      {id:1,date:'2025-06-28',severity:7,mood:'😢',areas:['Elbow Creases','Behind Knees'],triggers:['🌡️ Heat','💦 Sweat'],notes:'Bad night — lots of scratching.'},
+      {id:2,date:'2025-06-27',severity:4,mood:'😐',areas:['Face / Cheeks'],triggers:['🧴 New Product'],notes:'Tried new body wash — mild reaction.'},
+      {id:3,date:'2025-06-26',severity:2,mood:'😊',areas:[],triggers:[],notes:'Good day! Skin looking much better 🎉'},
+    ],
+    appointments: [
+      {id:1,date:'2025-07-15',time:'10:30',doctor:'Dr Sarah Collins',type:'Dermatologist',notes:'Follow-up on steroid cream usage',location:'City Skin Clinic',upcoming:true},
+      {id:2,date:'2025-06-20',time:'14:00',doctor:'Dr Mike Turner',type:'GP',notes:'Initial assessment — prescribed Hydrocortisone 1%',location:'Family Health Centre',upcoming:false},
+    ],
+    savedProducts: [
+      {id:1,name:'CeraVe Moisturising Cream',rating:'safe',score:9,note:'Excellent for eczema skin'},
+      {id:2,name:"Johnson's Baby Wash",rating:'caution',score:5,note:'Contains fragrance — use sparingly'},
+    ],
+  },
+  {
+    id: 2, name: 'Shayan', emoji: '👦', age: '5 years', relationship: 'Son', color: '#0EA5E9',
+    logs: [
+      {id:10,date:'2025-06-28',severity:3,mood:'😊',areas:['Tummy'],triggers:['🌡️ Heat'],notes:'Mild rash on tummy after park.'},
+      {id:11,date:'2025-06-27',severity:5,mood:'😢',areas:['Face / Cheeks','Neck'],triggers:['🦷 Teething'],notes:'Teething drool rash on chin.'},
+    ],
+    appointments: [
+      {id:10,date:'2025-07-20',time:'09:00',doctor:'Dr Emma White',type:'GP',notes:'Skin check + weight review',location:'Parkside Health Centre',upcoming:true},
+    ],
+    savedProducts: [
+      {id:10,name:'Aveeno Baby Eczema Therapy Cream',rating:'safe',score:9,note:'Works great for Shayan'},
+    ],
+  },
+];
+
+const FAKE_SCAN_RESULTS = [
+  {name:'Aveeno Baby Eczema Therapy Moisturising Cream',brand:'Aveeno',rating:'safe',score:9,
+   keyIngredients:['Colloidal Oatmeal','Ceramides','Glycerin'],concerns:[],
+   note:'Specifically formulated for eczema. Fragrance-free and clinically tested.'},
+  {name:'Organic Lavender Bubble Bath',brand:'NaturalKids',rating:'caution',score:5,
+   keyIngredients:['Sodium Lauryl Sulfoacetate','Lavender Oil','Aloe Vera'],
+   concerns:['Essential oils can irritate eczema','Foaming agents may dry skin'],
+   note:'Use with caution — dilute well and keep baths short.'},
+  {name:'Fruity Kids Body Wash',brand:'FunBath',rating:'avoid',score:2,
+   keyIngredients:['Sodium Lauryl Sulfate','Synthetic Fragrance','Parabens'],
+   concerns:['SLS is a known skin irritant','Synthetic fragrance — common eczema trigger','Parabens — preservatives linked to irritation'],
+   note:'Not recommended for eczema-prone skin.'},
+];
+
+const AI_KB = [
+  {keys:['moisturis','emollient','cream','lotion','ointment'],reply:`💧 **Moisturising** is the single most important part of eczema management!\n\nApply emollients **at least 2–3 times daily**, and always within **3 minutes of bathing** while skin is still slightly damp — this is the "soak and seal" method.\n\nLook for:\n• Thick, fragrance-free creams or ointments\n• Products with ceramides (CeraVe, Aveeno Eczema)\n• Prescribed emollients from your GP\n\nFor little ones, apply generously — you really can't over-moisturise! 🌟`},
+  {keys:['bath','wash','shower','water'],reply:`🛁 **Bath time tips for eczema:**\n\n• Use **lukewarm water** (not hot — heat triggers flares!)\n• Keep baths to **5–10 minutes**\n• Use a **soap-free, fragrance-free** wash\n• Pat (don't rub!) dry with a **soft cotton towel**\n• Apply moisturiser **immediately** after\n• Adding **colloidal oatmeal** to bathwater is very soothing\n\nBath time can be beneficial when done right! 💜`},
+  {keys:['scratch','itch','itchy','scratching'],reply:`✋ **Stopping the scratch-itch cycle:**\n\n• Keep nails **short and filed** smooth\n• **Scratch sleeves** or cotton mittens at night\n• **Cool wet wraps** on bad flare days\n• The **"cold spoon"** trick — press gently on the itch\n• **Distraction** — a favourite toy or song!\n• Keep skin well moisturised to reduce baseline itch\n\nFor older children, teaching "press and cool" instead of scratch really helps! 🧊`},
+  {keys:['sleep','night','bed','tired','wake'],reply:`😴 **Eczema and sleep:**\n\n• Keep bedroom **cool (around 18°C)**\n• Use **100% cotton bedding** — wash at 60°C weekly\n• Apply a **thick layer of emollient** at bedtime\n• Consider **wet wraps** on very bad nights\n• Ask your GP about **antihistamines** for sleep\n• Keep the room **dark** — overheating worsens itch\n\nYou're doing an amazing job — hang in there! 🌙`},
+  {keys:['food','eat','diet','allerg','milk','egg','wheat','nut'],reply:`🍎 **Food triggers and eczema:**\n\nAround **30% of children** with moderate-to-severe eczema have a food allergy. Common triggers:\n• Cow's milk\n• Eggs\n• Wheat / gluten\n• Soy\n• Tree nuts & peanuts\n\n**Important:** Don't eliminate food groups without speaking to your GP first.\n\nKeep a **food diary** in the Track tab and share it with your doctor! 🩺`},
+  {keys:['steroid','hydrocortisone','cortisone','betnovate','eumovate'],reply:`💊 **Using steroid creams safely:**\n\nSteroid creams are safe and effective when used correctly!\n\n• Use the **"fingertip unit"** guide\n• Apply **thinly** to affected areas only\n• Use for the **prescribed duration** then step down\n• **Never** apply to unaffected skin\n• Apply emollient 20–30 mins after\n\nSpeak to your GP about steroid-free options like Protopic or Elidel if concerned. 🏥`},
+  {keys:['trigger','cause','why','flare'],reply:`🔍 **Understanding triggers:**\n\nCommon triggers include:\n• **Environmental:** heat, sweat, dry air, pollen, pet dander\n• **Products:** fragrances, SLS in soaps\n• **Fabrics:** synthetics, wool — stick to soft cotton!\n• **Food:** milk, eggs, wheat (especially under-5s)\n• **Stress:** yes, even in babies!\n\nUse the **Track tab** to spot patterns over time! 📊`},
+];
+const analyseTriggers = (logs) => {
+  if (!logs || logs.length < 3) return null;
+  const insights = {};
+  const nextDay = {};
+  const sorted = [...logs].sort((a,b) => new Date(a.date) - new Date(b.date));
+  sorted.forEach(log => {
+    (log.triggers||[]).forEach(trigger => {
+      if (!insights[trigger]) insights[trigger] = {total:0,count:0,highFlares:0};
+      insights[trigger].total += log.severity;
+      insights[trigger].count += 1;
+      if (log.severity >= 6) insights[trigger].highFlares += 1;
+    });
+  });
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const today = sorted[i];
+    const tomorrow = sorted[i+1];
+    const gap = (new Date(tomorrow.date) - new Date(today.date)) / 86400000;
+    if (gap !== 1) continue;
+    (today.triggers||[]).forEach(trigger => {
+      if (!nextDay[trigger]) nextDay[trigger] = {total:0,count:0};
+      nextDay[trigger].total += tomorrow.severity;
+      nextDay[trigger].count += 1;
+    });
+  }
+  const results = Object.entries(insights).map(([trigger,data]) => {
+    const avg = data.total / data.count;
+    const flareRate = Math.round((data.highFlares / data.count) * 100);
+    const nd = nextDay[trigger];
+    const ndAvg = nd ? (nd.total / nd.count).toFixed(1) : null;
+    const risk = Math.min(100, Math.round((avg/10)*50 + flareRate*0.5));
+    return {
+      trigger, count:data.count,
+      avgSeverity: avg.toFixed(1),
+      flareRate, nextDayAvg:ndAvg, riskScore:risk,
+      label: risk>=70?'High Risk':risk>=40?'Moderate Risk':'Low Risk',
+      color: risk>=70?'#EF4444':risk>=40?'#F59E0B':'#22C55E',
+    };
+  });
+  return results.sort((a,b) => b.riskScore - a.riskScore);
+};
+
+const predictTomorrow = (logs, insights) => {
+  if (!logs||!logs.length||!insights) return null;
+  const recent = logs.slice(0,3);
+  const recentTrigs = [...new Set(recent.flatMap(l=>l.triggers||[]))];
+  const recentAvg = recent.reduce((s,l)=>s+l.severity,0) / recent.length;
+  if (!recentTrigs.length) return {
+    riskLevel:'Low',riskColor:'#22C55E',riskPercent:15,
+    message:'No major triggers logged recently. Keep up the routine! 🌟',
+    likelyType:null, topTriggers:[],
+  };
+  const matched = insights.filter(i=>recentTrigs.includes(i.trigger));
+  if (!matched.length) return null;
+  const avgRisk = matched.reduce((s,m)=>s+m.riskScore,0) / matched.length;
+  const boost = recentAvg>=6?15:recentAvg>=4?5:0;
+  const final = Math.min(95, Math.round(avgRisk+boost));
+  const top = matched[0];
+  let type = `Flare linked to ${top.trigger} — apply extra emollient tonight`;
+  if (top.trigger.includes('Heat')||top.trigger.includes('Sweat')) type='Heat-induced rash — keep skin cool and moisturised tonight';
+  else if (top.trigger.includes('Food')) type='Possible food reaction — monitor after meals tomorrow';
+  else if (top.trigger.includes('Product')) type='Contact irritation — avoid the new product entirely';
+  else if (top.trigger.includes('Stress')) type='Stress-triggered flare — try a calm cool evening routine';
+  else if (top.trigger.includes('Pet')||top.trigger.includes('Pollen')) type='Allergen flare — rinse skin and change clothes';
+  return {
+    riskLevel: final>=65?'High':final>=35?'Moderate':'Low',
+    riskColor: final>=65?'#EF4444':final>=35?'#F59E0B':'#22C55E',
+    riskPercent: final,
+    message: `Based on recent triggers, tomorrow carries a ${final}% flare risk.`,
+    likelyType: type,
+    topTriggers: matched.slice(0,3),
+  };
+};
+
+const TriggerInsights = ({profile}) => {
+  const [view, setView] = useState('prediction');
+  const insights = analyseTriggers(profile.logs);
+  const prediction = predictTomorrow(profile.logs, insights);
+  const pc = profile.color;
+
+  if (!insights) return (
+    <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-5 text-center">
+      <div className="text-4xl mb-2">🧠</div>
+      <div className="font-bold text-gray-700 mb-1">Trigger Learning</div>
+      <p className="text-gray-400 text-sm">Log at least <strong>3 days</strong> of data and the app will learn {profile.name}'s personal trigger patterns.</p>
+      <div className="mt-3 flex justify-center gap-2">
+        {[1,2,3].map(i=>(
+          <div key={i} className="h-2 rounded-full" style={{width:i<=profile.logs.length?32:16,background:i<=profile.logs.length?pc:'#E5E7EB'}} />
+        ))}
+      </div>
+      <p className="text-xs text-gray-400 mt-2">{profile.logs.length}/3 logs recorded</p>
+    </div>
+  );
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="font-bold text-gray-800 text-lg">🧠 Trigger Learning</div>
+        <div className="flex bg-gray-100 rounded-xl p-1">
+          {[['prediction','Tomorrow'],['patterns','Patterns']].map(([v,l])=>(
+            <button key={v} onClick={()=>setView(v)}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+              style={view===v?{background:pc,color:'white'}:{color:'#6B7280'}}>
+              {l}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {view==='prediction' && prediction && (
+        <div className="space-y-3">
+          <div className="rounded-3xl p-5 border-2" style={{background:prediction.riskColor+'10',borderColor:prediction.riskColor+'35'}}>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-xs text-gray-500 mb-0.5">Tomorrow's Flare Risk</p>
+                <p className="text-3xl font-black" style={{color:prediction.riskColor}}>{prediction.riskPercent}%</p>
+                <span className="text-sm font-bold" style={{color:prediction.riskColor}}>{prediction.riskLevel} Risk</span>
+              </div>
+              <div className="relative w-20 h-20">
+                <svg viewBox="0 0 36 36" style={{width:80,height:80,transform:'rotate(-90deg)'}}>
+                  <circle cx="18" cy="18" r="15.9" fill="none" stroke="#E5E7EB" strokeWidth="3"/>
+                  <circle cx="18" cy="18" r="15.9" fill="none" stroke={prediction.riskColor} strokeWidth="3"
+                    strokeDasharray={`${prediction.riskPercent} 100`} strokeLinecap="round"/>
+                </svg>
+                <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:22}}>
+                  {prediction.riskLevel==='High'?'🔴':prediction.riskLevel==='Moderate'?'🟡':'🟢'}
+                </div>
+              </div>
+            </div>
+            <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden mb-3">
+              <div className="h-full rounded-full" style={{width:`${prediction.riskPercent}%`,background:prediction.riskColor}} />
+            </div>
+            <p className="text-sm text-gray-600 leading-relaxed mb-3">{prediction.message}</p>
+            {prediction.likelyType && (
+              <div className="rounded-xl p-3 flex gap-2" style={{background:prediction.riskColor+'18'}}>
+                <span className="text-sm">💡</span>
+                <p className="text-sm font-medium" style={{color:prediction.riskColor}}>{prediction.likelyType}</p>
+              </div>
+            )}
+          </div>
+
+          {prediction.topTriggers.length > 0 && (
+            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-4">
+              <p className="font-semibold text-gray-700 text-sm mb-3">🔗 Triggers Contributing to Risk</p>
+              <div className="space-y-2.5">
+                {prediction.topTriggers.map(t=>(
+                  <div key={t.trigger}>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-sm text-gray-700">{t.trigger}</span>
+                      <span className="text-xs font-bold" style={{color:t.color}}>{t.riskScore}%</span>
+                    </div>
+                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full" style={{width:`${t.riskScore}%`,background:t.color}} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-4 flex gap-3">
+            <div className="text-2xl">{prediction.riskLevel==='High'?'🚨':prediction.riskLevel==='Moderate'?'⚠️':'✅'}</div>
+            <div>
+              <p className="font-semibold text-gray-800 text-sm mb-1">Tonight's Recommendation</p>
+              <p className="text-gray-500 text-sm leading-relaxed">
+                {prediction.riskLevel==='High'
+                  ? `Apply extra emollient to ${profile.name}'s known flare spots. Consider wet wraps if already irritated. Keep the bedroom cool.`
+                  : prediction.riskLevel==='Moderate'
+                  ? `Stick to the normal moisturising routine and log any new triggers you notice tonight.`
+                  : `Skin looks stable — keep up the great routine! Standard emollient tonight should be plenty.`}
+              </p>
+            </div>
+          </div>
+          <p className="text-xs text-gray-400 text-center">🧠 Based on {profile.logs.length} entries — gets smarter as you log more!</p>
+        </div>
+      )}
+
+      {view==='patterns' && (
+        <div className="space-y-3">
+          {insights.length > 0 && (
+            <div className="rounded-2xl p-4" style={{background:pc+'10',border:`1.5px solid ${pc}30`}}>
+              <p className="text-sm font-medium" style={{color:pc}}>
+                📊 {profile.name}'s top trigger is <strong>{insights[0].trigger}</strong> — logged {insights[0].count}x with a {insights[0].flareRate}% severe flare rate.
+              </p>
+            </div>
+          )}
+          {insights.map(t=>(
+            <div key={t.trigger} className="bg-white rounded-3xl shadow-sm border border-gray-100 p-4">
+              <div className="flex justify-between items-center mb-3">
+                <div>
+                  <p className="font-bold text-gray-800 text-sm">{t.trigger}</p>
+                  <p className="text-xs text-gray-400">Logged {t.count}x · Avg {t.avgSeverity}/10</p>
+                </div>
+                <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{background:t.color+'18',color:t.color}}>{t.label}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                {[
+                  {label:'Avg Severity',val:`${t.avgSeverity}/10`},
+                  {label:'Severe Flares',val:`${t.flareRate}%`},
+                  {label:'Next-Day Avg',val:t.nextDayAvg?`${t.nextDayAvg}/10`:'N/A'},
+                ].map(s=>(
+                  <div key={s.label} className="text-center rounded-xl py-2" style={{background:t.color+'10'}}>
+                    <div className="font-black text-sm" style={{color:t.color}}>{s.val}</div>
+                    <div className="text-xs text-gray-400 leading-tight mt-0.5">{s.label}</div>
+                  </div>
+                ))}
+              </div>
+              <div>
+                <div className="flex justify-between text-xs text-gray-400 mb-1">
+                  <span>Risk Score</span><span style={{color:t.color}}>{t.riskScore}%</span>
+                </div>
+                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full" style={{width:`${t.riskScore}%`,background:t.color}} />
+                </div>
+              </div>
+              {t.nextDayAvg && parseFloat(t.nextDayAvg) > parseFloat(t.avgSeverity) && (
+                <p className="text-xs mt-2 p-2 rounded-lg" style={{background:t.color+'10',color:t.color}}>
+                  ⚠️ Skin tends to be <strong>worse the day after</strong> this trigger (avg {t.nextDayAvg}/10)
+                </p>
+              )}
+            </div>
+          ))}
+          <p className="text-xs text-gray-400 text-center">Patterns update automatically as you log more 🧠</p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ═══════════════════════════════════════════
+   SHARED COMPONENTS
+═══════════════════════════════════════════ */
+const SeverityBadge = ({score}) => {
+  const c = score>=7?{bg:'bg-red-100',text:'text-red-600',label:'Severe'}
+           :score>=4?{bg:'bg-amber-100',text:'text-amber-600',label:'Moderate'}
+                    :{bg:'bg-green-100',text:'text-green-600',label:'Mild'};
+  return <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${c.bg} ${c.text}`}>{score}/10 {c.label}</span>;
+};
+
+const Card = ({children,className=''}) => (
+  <div className={`bg-white rounded-3xl shadow-sm border border-gray-100 ${className}`}>{children}</div>
+);
+
+/* ═══════════════════════════════════════════
+   PROFILE FORM (Add / Edit)
+═══════════════════════════════════════════ */
+const ProfileForm = ({profile, onSave, onCancel, onDelete, isOnlyProfile}) => {
+  const [name,         setName]         = useState(profile?.name || '');
+  const [emoji,        setEmoji]        = useState(profile?.emoji || '👶');
+  const [age,          setAge]          = useState(profile?.age || '');
+  const [relationship, setRelationship] = useState(profile?.relationship || 'Daughter');
+  const [color,        setColor]        = useState(profile?.color || PROFILE_COLORS[0]);
+  const [confirmDel,   setConfirmDel]   = useState(false);
+
+  const canSave = name.trim().length > 0;
+  const isEdit  = !!profile;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center fade-in" style={{background:'rgba(0,0,0,0.55)'}}>
+      <div className="w-full bg-white rounded-t-3xl sheet-up pb-10"
+        style={{maxWidth:430,maxHeight:'92vh',overflowY:'auto',left:'50%',transform:'none'}}>
+
+        {/* Sticky header */}
+        <div className="sticky top-0 bg-white rounded-t-3xl pt-3 pb-3 px-5 border-b border-gray-100 z-10">
+          <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-3" />
+          <div className="flex justify-between items-center">
+            <h3 className="font-bold text-gray-800 text-xl">{isEdit ? 'Edit Profile' : '✨ New Profile'}</h3>
+            <button onClick={onCancel} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 font-bold">✕</button>
+          </div>
+        </div>
+
+        <div className="px-5 pt-4 space-y-5">
+
+          {/* Live preview */}
+          <div className="rounded-2xl p-4 flex items-center gap-4 transition-all"
+            style={{background:color+'12',border:`2px solid ${color}35`}}>
+            <div className="w-16 h-16 rounded-full flex items-center justify-center text-3xl flex-shrink-0 transition-all"
+              style={{background:color+'25',border:`3px solid ${color}`}}>
+              {emoji}
+            </div>
+            <div>
+              <div className="font-bold text-gray-800 text-xl">{name || 'Name'}</div>
+              <div className="text-gray-500 text-sm">{relationship} · {age || 'Age'}</div>
+              <div className="mt-1.5 h-2 rounded-full w-20" style={{background:color+'55'}} />
+            </div>
+          </div>
+
+          {/* Emoji grid */}
+          <div>
+            <label className="text-sm font-semibold text-gray-600 block mb-2">Choose Avatar</label>
+            <div className="flex flex-wrap gap-2">
+              {PROFILE_EMOJIS.map(e => (
+                <button key={e} onClick={()=>setEmoji(e)}
+                  className="w-11 h-11 rounded-xl text-2xl flex items-center justify-center transition-all active:scale-90"
+                  style={emoji===e?{background:color+'25',border:`2px solid ${color}`,transform:'scale(1.1)'}:{background:'#F3F4F6'}}>
+                  {e}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Name */}
+          <div>
+            <label className="text-sm font-semibold text-gray-600 block mb-1.5">Name *</label>
+            <input value={name} onChange={e=>setName(e.target.value)}
+              placeholder="e.g. Maya, Shayan, Mum, Dad..."
+              className="w-full bg-gray-50 border-2 border-gray-100 focus:border-purple-300 rounded-xl px-4 py-3 text-gray-800 text-base transition-colors" />
+          </div>
+
+          {/* Age */}
+          <div>
+            <label className="text-sm font-semibold text-gray-600 block mb-1.5">Age</label>
+            <input value={age} onChange={e=>setAge(e.target.value)}
+              placeholder="e.g. 3 years, 7 months, 34..."
+              className="w-full bg-gray-50 border-2 border-gray-100 focus:border-purple-300 rounded-xl px-4 py-3 text-gray-800 transition-colors" />
+          </div>
+
+          {/* Relationship */}
+          <div>
+            <label className="text-sm font-semibold text-gray-600 block mb-2">Relationship</label>
+            <div className="flex flex-wrap gap-2">
+              {RELATIONSHIPS.map(r => (
+                <button key={r} onClick={()=>setRelationship(r)}
+                  className="px-4 py-2.5 rounded-xl text-sm font-medium transition-all active:scale-95"
+                  style={relationship===r?{background:color,color:'white'}:{background:'#F3F4F6',color:'#4B5563'}}>
+                  {r}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Color */}
+          <div>
+            <label className="text-sm font-semibold text-gray-600 block mb-2">Profile Colour</label>
+            <div className="flex gap-3 flex-wrap">
+              {PROFILE_COLORS.map(c => (
+                <button key={c} onClick={()=>setColor(c)}
+                  className="w-10 h-10 rounded-full transition-all active:scale-90 flex items-center justify-center"
+                  style={{background:c,boxShadow:color===c?`0 0 0 3px white,0 0 0 5px ${c}`:'none'}}>
+                  {color===c && <span className="text-white text-sm font-bold">✓</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3 pt-1">
+            <button onClick={onCancel}
+              className="flex-1 py-4 rounded-2xl border-2 border-gray-200 text-gray-600 font-medium text-base">
+              Cancel
+            </button>
+            <button onClick={()=>canSave&&onSave({name:name.trim(),emoji,age,relationship,color})}
+              disabled={!canSave}
+              className="flex-1 py-4 rounded-2xl font-bold text-white text-base transition-all active:scale-98"
+              style={{background:canSave?color:'#D1D5DB'}}>
+              {isEdit ? 'Save Changes ✓' : 'Create Profile ✨'}
+            </button>
+          </div>
+
+          {/* Delete */}
+          {isEdit && !isOnlyProfile && (
+            <div>
+              {!confirmDel ? (
+                <button onClick={()=>setConfirmDel(true)}
+                  className="w-full py-3 text-red-400 text-sm font-medium active:text-red-600">
+                  🗑️ Delete {profile.name}'s Profile
+                </button>
+              ) : (
+                <div className="bg-red-50 border-2 border-red-100 rounded-2xl p-4 space-y-3 pop-in">
+                  <p className="text-red-700 font-bold text-center">Delete {profile.name}'s profile?</p>
+                  <p className="text-red-500 text-xs text-center leading-relaxed">
+                    All logs, appointments and data for this profile will be <strong>permanently deleted</strong>.
+                  </p>
+                  <div className="flex gap-2">
+                    <button onClick={()=>setConfirmDel(false)}
+                      className="flex-1 py-2.5 rounded-xl border border-gray-300 text-gray-600 text-sm font-medium">
+                      Keep It
+                    </button>
+                    <button onClick={onDelete}
+                      className="flex-1 py-2.5 rounded-xl bg-red-500 text-white font-bold text-sm">
+                      Yes, Delete
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          {isEdit && isOnlyProfile && (
+            <p className="text-center text-gray-400 text-xs pb-2">Add another profile before deleting this one</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ═══════════════════════════════════════════
+   PROFILE SWITCHER SHEET
+═══════════════════════════════════════════ */
+const ProfileSwitcherSheet = ({profiles, activeId, onSwitch, onAdd, onEdit, onClose}) => {
+  const [managing, setManaging] = useState(false);
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div className="fixed inset-0 z-40 fade-in" style={{background:'rgba(0,0,0,0.5)'}} onClick={onClose} />
+
+      {/* Sheet */}
+      <div className="fixed bottom-0 z-50 w-full bg-white rounded-t-3xl sheet-up"
+        style={{maxWidth:430,left:'50%',transform:'translateX(-50%)',maxHeight:'80vh',overflowY:'auto'}}>
+
+        {/* Handle + header */}
+        <div className="sticky top-0 bg-white rounded-t-3xl pt-3 pb-3 px-5 border-b border-gray-100 z-10">
+          <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-3" />
+          <div className="flex justify-between items-center">
+            <h3 className="font-bold text-gray-800 text-lg">Family Profiles 👨‍👩‍👧‍👦</h3>
+            <div className="flex gap-2">
+              <button onClick={()=>setManaging(m=>!m)}
+                className={`text-sm font-medium px-3 py-1.5 rounded-xl transition-all ${managing?'bg-gray-100 text-gray-600':'text-purple-600 bg-purple-50'}`}>
+                {managing ? 'Done' : '✏️ Manage'}
+              </button>
+              <button onClick={onClose}
+                className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 text-sm font-bold">✕</button>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-4 pt-3 pb-6 space-y-2">
+          {profiles.map(p => {
+            const isActive  = p.id === activeId;
+            const avgSev    = p.logs.length ? (p.logs.reduce((s,l)=>s+l.severity,0)/p.logs.length).toFixed(1) : null;
+            const nextAppt  = p.appointments.filter(a=>a.upcoming).length;
+            const lastLog   = p.logs[0];
+            return (
+              <div key={p.id}
+                className="rounded-2xl border-2 transition-all overflow-hidden"
+                style={isActive?{borderColor:p.color,background:p.color+'08'}:{borderColor:'#F3F4F6',background:'#FAFAFA'}}>
+
+                {/* Main row */}
+                <button
+                  onClick={()=>{ if(!managing){onSwitch(p.id);onClose();} }}
+                  className="w-full flex items-center gap-3 p-4 text-left">
+
+                  {/* Avatar */}
+                  <div className="relative flex-shrink-0">
+                    <div className="w-14 h-14 rounded-full flex items-center justify-center text-2xl"
+                      style={{background:p.color+'22',border:`2.5px solid ${p.color}55`}}>
+                      {p.emoji}
+                    </div>
+                    {isActive && (
+                      <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full flex items-center justify-center"
+                        style={{background:p.color,border:'2px solid white'}}>
+                        <span className="text-white text-xs">✓</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-gray-800 text-base">{p.name}</span>
+                      {isActive && (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full text-white"
+                          style={{background:p.color}}>Active</span>
+                      )}
+                    </div>
+                    <div className="text-gray-500 text-sm">{p.relationship} · {p.age}</div>
+                    <div className="flex items-center gap-3 mt-1 flex-wrap">
+                      <span className="text-xs text-gray-400">{p.logs.length} logs</span>
+                      {avgSev && (
+                        <span className="text-xs font-semibold" style={{color:p.color}}>Avg {avgSev}/10</span>
+                      )}
+                      {nextAppt > 0 && (
+                        <span className="text-xs text-indigo-500 font-medium">📅 {nextAppt} upcoming</span>
+                      )}
+                      {lastLog && (
+                        <span className="text-xs text-gray-400">Last: {lastLog.date}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Arrow or severity indicator */}
+                  {!managing && (
+                    <div className="flex-shrink-0 text-gray-300 text-lg">
+                      {isActive ? '' : '›'}
+                    </div>
+                  )}
+                </button>
+
+                {/* Severity mini bar */}
+                {avgSev && !managing && (
+                  <div className="px-4 pb-3">
+                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all"
+                        style={{width:`${(avgSev/10)*100}%`,background:avgSev>=7?'#EF4444':avgSev>=4?'#F59E0B':'#22C55E'}} />
+                    </div>
+                  </div>
+                )}
+
+                {/* Manage actions */}
+                {managing && (
+                  <div className="px-4 pb-3 flex gap-2">
+                    <button onClick={()=>onEdit(p)}
+                      className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95"
+                      style={{background:p.color+'15',color:p.color}}>
+                      ✏️ Edit Profile
+                    </button>
+                    {!isActive && (
+                      <button onClick={()=>{onSwitch(p.id);onClose();}}
+                        className="flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 text-gray-600 transition-all active:scale-95"
+                        style={{borderColor:p.color+'40'}}>
+                        Switch →
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Add new */}
+          <button onClick={onAdd}
+            className="w-full py-4 rounded-2xl border-2 border-dashed border-gray-300 text-gray-500 font-medium flex items-center justify-center gap-2 active:bg-gray-50 transition-all mt-2">
+            <span className="text-xl">➕</span>
+            <span>Add New Profile</span>
+          </button>
+
+          {/* Tip */}
+          <div className="bg-blue-50 rounded-2xl p-3 flex gap-2 items-start">
+            <span className="text-base">💡</span>
+            <p className="text-blue-600 text-xs leading-relaxed">
+              Each profile has its own logs, appointments, and saved products. Switch between family members anytime from the header.
+            </p>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+};
+const PHOTO_ANALYSES = [
+  {
+    severity:3, label:'Mild', color:'#22C55E', emoji:'🟢',
+    observations:['Light redness visible','Minor dryness around the area','Skin surface largely intact','No signs of infection or weeping'],
+    possibleCauses:['Mild environmental irritant','Slight heat or sweat reaction','Fabric friction on sensitive skin'],
+    immediate:['Apply emollient generously to the area now','Ensure clothing is soft cotton over this area','Keep skin cool and moisturised','Log any triggers from today in the Track tab'],
+    seeDoctor:false,
+    doctorNote:'No urgent action needed. Monitor daily and log any changes.',
+  },
+  {
+    severity:6, label:'Moderate', color:'#F59E0B', emoji:'🟡',
+    observations:['Clear redness and inflammation visible','Dry flaky patches present','Some skin thickening','Possible scratch marks visible'],
+    possibleCauses:['Heat or sweat exposure','Contact with a new product or detergent in last 48hrs','Allergen exposure — check recent triggers','Fabric irritation from non-cotton clothing'],
+    immediate:['Apply thick emollient immediately','Use a cool damp cloth for itch relief','Dress the area in soft cotton','Avoid all known triggers for next 48 hours','Use prescribed topical treatment if available'],
+    seeDoctor:false,
+    doctorNote:'Book a routine GP appointment if no improvement within 5–7 days or if severity increases.',
+  },
+  {
+    severity:8, label:'Severe', color:'#EF4444', emoji:'🔴',
+    observations:['Significant redness and swelling','Broken or weeping skin present','Extensive dry and cracked areas','Signs of intense scratching and skin trauma'],
+    possibleCauses:['Major trigger exposure — review recent logs','Possible skin infection developing','Prolonged contact with irritant','Stress combined with environmental triggers'],
+    immediate:['Apply prescribed emollient or steroid cream if available','Cover loosely with soft cotton to prevent further scratching','Cool the area gently with a damp cloth','Avoid all known triggers immediately','Do not apply any new products to the area'],
+    seeDoctor:true,
+    doctorNote:'⚠️ Consider contacting your GP soon — weeping or broken skin can develop infection and needs prompt assessment.',
+  },
+];
+
+const PhotoAnalysis = ({profileName, profileColor}) => {
+  const [photo,     setPhoto]     = useState(null);
+  const [analysing, setAnalysing] = useState(false);
+  const [result,    setResult]    = useState(null);
+  const fileRef = useRef(null);
+  const pc = profileColor;
+
+  const handleFile = e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      setPhoto(ev.target.result);
+      setResult(null);
+      setAnalysing(true);
+      setTimeout(() => {
+        setResult(PHOTO_ANALYSES[Math.floor(Math.random() * PHOTO_ANALYSES.length)]);
+        setAnalysing(false);
+      }, 3000);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const reset = () => { setPhoto(null); setResult(null); setAnalysing(false); if(fileRef.current) fileRef.current.value=''; };
+
+  return (
+    <div className="space-y-3">
+      <div className="bg-blue-50 border border-blue-200 rounded-2xl p-3 flex gap-2">
+        <span className="text-sm flex-shrink-0">ℹ️</span>
+        <p className="text-blue-700 text-xs leading-relaxed">
+          <strong>Guidance only — not medical diagnosis.</strong> This uses visual pattern recognition based on known eczema presentations. Always consult your GP or dermatologist.
+        </p>
+      </div>
+
+      {!photo && (
+        <button onClick={()=>fileRef.current?.click()}
+          className="w-full py-5 rounded-2xl border-2 border-dashed flex flex-col items-center gap-2 active:bg-gray-50 transition-all"
+          style={{borderColor:pc+'60'}}>
+          <span className="text-3xl">📸</span>
+          <span className="font-semibold text-gray-600 text-sm">Add Skin Photo for AI Assessment</span>
+          <span className="text-gray-400 text-xs">Tap to upload from camera or gallery</span>
+        </button>
+      )}
+
+      <input ref={fileRef} type="file" accept="image/*" capture="environment"
+        style={{display:'none'}} onChange={handleFile} />
+
+      {photo && (
+        <div className="space-y-3">
+          <div className="relative rounded-2xl overflow-hidden">
+            <img src={photo} alt="Skin" className="w-full object-cover rounded-2xl" style={{maxHeight:200,objectFit:'cover'}} />
+            {analysing && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl" style={{background:'rgba(0,0,0,0.65)'}}>
+                <div className="text-3xl mb-2">🔬</div>
+                <p className="text-white font-semibold text-sm">Analysing skin image…</p>
+                <p className="text-white/70 text-xs mt-1">Checking severity, patterns and triggers</p>
+                <div className="flex gap-1 mt-3">
+                  <div className="dot" style={{background:'white'}}/>
+                  <div className="dot" style={{background:'white'}}/>
+                  <div className="dot" style={{background:'white'}}/>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {result && !analysing && (
+            <div className="space-y-3 fade-in">
+
+              <div className="rounded-2xl p-4 border-2" style={{background:result.color+'12',borderColor:result.color+'40'}}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-gray-500 mb-0.5">AI Severity Assessment</p>
+                    <p className="text-3xl font-black" style={{color:result.color}}>{result.severity}/10</p>
+                    <span className="font-bold text-sm" style={{color:result.color}}>{result.emoji} {result.label} Eczema</span>
+                  </div>
+                  <div className="relative" style={{width:64,height:64}}>
+                    <svg viewBox="0 0 36 36" style={{width:64,height:64,transform:'rotate(-90deg)'}}>
+                      <circle cx="18" cy="18" r="15.9" fill="none" stroke="#E5E7EB" strokeWidth="3"/>
+                      <circle cx="18" cy="18" r="15.9" fill="none" stroke={result.color} strokeWidth="3"
+                        strokeDasharray={`${result.severity*10} 100`} strokeLinecap="round"/>
+                    </svg>
+                    <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20}}>
+                      {result.emoji}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+                <p className="font-semibold text-gray-700 text-sm mb-2">👁️ Visual Observations</p>
+                {result.observations.map((o,i)=>(
+                  <p key={i} className="text-sm text-gray-600 py-1.5 border-b border-gray-50 last:border-0">• {o}</p>
+                ))}
+              </div>
+
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+                <p className="font-semibold text-gray-700 text-sm mb-2">🔍 Possible Causes</p>
+                {result.possibleCauses.map((c,i)=>(
+                  <p key={i} className="text-sm text-gray-600 py-1.5 border-b border-gray-50 last:border-0">• {c}</p>
+                ))}
+                <p className="text-xs text-gray-400 mt-2 pt-1">Cross-referenced with {profileName}'s logged triggers</p>
+              </div>
+
+              <div className="rounded-2xl p-4 border-2" style={{background:pc+'08',borderColor:pc+'30'}}>
+                <p className="font-semibold text-sm mb-2" style={{color:pc}}>✅ What To Do Right Now</p>
+                {result.immediate.map((r,i)=>(
+                  <p key={i} className="text-sm text-gray-600 py-1.5 border-b border-gray-100 last:border-0">• {r}</p>
+                ))}
+              </div>
+
+              <div className={`rounded-2xl p-4 flex gap-3 items-start ${result.seeDoctor?'bg-red-50 border-2 border-red-200':'bg-gray-50 border border-gray-200'}`}>
+                <span className="text-xl flex-shrink-0">{result.seeDoctor?'🚨':'📋'}</span>
+                <p className={`text-sm leading-relaxed ${result.seeDoctor?'text-red-700 font-semibold':'text-gray-500'}`}>
+                  {result.doctorNote}
+                </p>
+              </div>
+
+              <p className="text-xs text-gray-400 text-center px-4 leading-relaxed">
+                ⚕️ AI guidance only based on visual patterns — not a medical diagnosis. Always consult your healthcare provider for proper assessment.
+              </p>
+            </div>
+          )}
+
+          {!analysing && (
+            <button onClick={reset}
+              className="w-full py-3 rounded-2xl border-2 border-gray-200 text-gray-500 text-sm font-medium active:scale-95 transition-all">
+              🔄 Take Another Photo
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ═══════════════════════════════════════════
+   DASHBOARD
+═══════════════════════════════════════════ */
+const Dashboard = ({profile, onQuickLog}) => {
+  const {logs, name, color: pc, emoji} = profile;
+  const avg      = logs.length ? (logs.reduce((s,l)=>s+l.severity,0)/logs.length).toFixed(1) : '—';
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayLog = logs.find(l=>l.date===todayStr);
+
+  const tips = [
+    {icon:'💧',tip:'Apply moisturiser within 3 minutes of bath — "soak and seal" locks moisture in.'},
+    {icon:'🌡️',tip:'Keep the bedroom cool at night (around 18°C). Overheating is a top itch trigger.'},
+    {icon:'👕',tip:'Dress in 100% soft cotton. Avoid wool and synthetic fabrics directly on skin.'},
+    {icon:'✋',tip:'Keep nails short and filed smooth to reduce damage from overnight scratching.'},
+  ];
+  const tip      = tips[new Date().getDate() % tips.length];
+  const weekData = [2,5,3,7,6,4,logs[0]?.severity||3];
+
+  return (
+    <div className="slide-up pb-28 px-4 pt-3 space-y-3">
+      {/* Stat cards */}
+      <div className="grid grid-cols-3 gap-2">
+        {[
+          {label:'Avg Score', val: avg,         sub:'last 7 days'},
+          {label:'Total Logs',val: logs.length, sub:'all time'},
+          {label:'Streak',    val: '7 🔥',      sub:'days tracked'},
+        ].map(s => (
+          <div key={s.label} className="rounded-2xl p-3 text-center border-2"
+            style={{background:pc+'10',borderColor:pc+'28'}}>
+            <div className="font-black text-xl" style={{color:pc}}>{s.val}</div>
+            <div className="text-gray-500 text-xs mt-0.5 leading-tight">{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Quick log CTA */}
+      {!todayLog ? (
+        <button onClick={onQuickLog}
+          className="ring-pulse w-full text-white rounded-3xl py-5 px-6 flex items-center justify-between shadow-lg active:scale-98 transition-all"
+          style={{background:`linear-gradient(135deg,${pc} 0%,${pc}AA 100%)`}}>
+          <div className="text-left">
+            <div className="font-bold text-lg">Log Today's Skin 📝</div>
+            <div className="text-white/70 text-sm">Quick tap — under 60 seconds!</div>
+          </div>
+          <div className="text-3xl">➕</div>
+        </button>
+      ) : (
+        <div className="w-full bg-green-50 border-2 border-green-200 rounded-3xl py-4 px-5 flex items-center justify-between">
+          <div>
+            <div className="font-bold text-green-700">Today's skin logged ✅</div>
+            <SeverityBadge score={todayLog.severity} />
+          </div>
+          <div className="text-3xl">{todayLog.mood}</div>
+        </div>
+      )}
+
+      {/* Tip of the day */}
+      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex gap-3">
+        <div className="text-2xl">{tip.icon}</div>
+        <div>
+          <div className="font-semibold text-amber-800 text-sm mb-1">💡 Today's Tip</div>
+          <p className="text-amber-700 text-sm leading-relaxed">{tip.tip}</p>
+        </div>
+      </div>
+<TriggerInsights profile={profile} />
+      {/* 7-day chart */}
+      <Card className="p-4">
+        <div className="font-semibold text-gray-700 mb-3">{name}'s Last 7 Days</div>
+        <div className="flex items-end gap-1.5 h-16">
+          {weekData.map((v,i) => {
+            const clr = v>=7?'#EF4444':v>=4?'#F59E0B':'#22C55E';
+            return (
+              <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                <div className="w-full rounded-t-lg" style={{height:`${(v/10)*100}%`,background:clr}} />
+                <div className="text-xs text-gray-400">{['M','T','W','T','F','S','S'][i]}</div>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+
+      {/* Recent logs */}
+      <div>
+        <div className="font-bold text-gray-800 text-lg mb-2">Recent Logs</div>
+        {logs.length === 0 && (
+          <div className="text-center py-10 text-gray-400">
+            <div className="text-5xl mb-3">{emoji}</div>
+            <p className="font-medium text-gray-500">No logs yet for {name}</p>
+            <p className="text-sm mt-1">Tap the button above to start!</p>
+          </div>
+        )}
+        {logs.slice(0,4).map(log => (
+          <Card key={log.id} className="p-4 mb-2 flex items-center gap-3">
+            <div className="text-2xl">{log.mood}</div>
+            <div className="flex-1 min-w-0">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium text-gray-600">{log.date}</span>
+                <SeverityBadge score={log.severity} />
+              </div>
+              {log.notes && <p className="text-xs text-gray-400 mt-0.5 truncate">{log.notes}</p>}
+              {log.areas.length > 0 && (
+                <div className="flex gap-1 mt-1 flex-wrap">
+                  {log.areas.slice(0,2).map(a => (
+                    <span key={a} className="text-xs px-2 py-0.5 rounded-full"
+                      style={{background:pc+'15',color:pc}}>{a}</span>
+                  ))}
+                  {log.areas.length > 2 && <span className="text-xs text-gray-400">+{log.areas.length-2}</span>}
+                </div>
+              )}
+            </div>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+/* ═══════════════════════════════════════════
+   TRACK (4-step wizard)
+═══════════════════════════════════════════ */
+const Track = ({profile, onSave}) => {
+  const [step,  setStep]  = useState(1);
+  const [sev,   setSev]   = useState(5);
+  const [mood,  setMood]  = useState('');
+  const [areas, setAreas] = useState([]);
+  const [trigs, setTrigs] = useState([]);
+  const [notes, setNotes] = useState('');
+  const [saved, setSaved] = useState(false);
+
+  const toggle = (setter,val) => setter(p=>p.includes(val)?p.filter(x=>x!==val):[...p,val]);
+  const pc        = profile.color;
+  const sevColor  = sev>=7?'#EF4444':sev>=4?'#F59E0B':'#22C55E';
+  const sevLabel  = sev>=7?'🔴 Severe':sev>=4?'🟡 Moderate':'🟢 Mild';
+  const stepNames = ['Severity & Mood','Body Areas','Triggers','Review & Save'];
+
+  const doSave = () => {
+    onSave({severity:sev,mood,areas,triggers:trigs,notes});
+    setSaved(true);
+    setTimeout(()=>{setSaved(false);setStep(1);setSev(5);setMood('');setAreas([]);setTrigs([]);setNotes('');},2200);
+  };
+
+  if (saved) return (
+    <div className="flex flex-col items-center justify-center pop-in" style={{minHeight:'60vh'}}>
+      <div className="text-7xl mb-4">🎉</div>
+      <h2 className="text-2xl font-bold text-gray-800">Saved!</h2>
+      <p className="text-gray-500 mt-2 text-center px-8">
+        Great job staying on top of {profile.name}'s skin journal 💜
+      </p>
+    </div>
+  );
+
+  return (
+    <div className="slide-up pb-28">
+      {/* Progress bar */}
+      <div className="px-5 pt-4 mb-4">
+        <div className="flex gap-2 mb-2">
+          {stepNames.map((_,i) => (
+            <div key={i} className="flex-1 h-1.5 rounded-full transition-all duration-500"
+              style={{background:step>i?pc:'#E5E7EB'}} />
+          ))}
+        </div>
+        <div className="flex justify-between">
+          <p className="text-gray-400 text-xs">Step {step} of 4</p>
+          <p className="text-xs font-semibold" style={{color:pc}}>{stepNames[step-1]}</p>
+        </div>
+      </div>
+
+      {/* Step 1 – Severity & Mood */}
+      {step===1 && (
+        <div className="px-5 fade-in space-y-4">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-800 mb-0.5">How's the skin today?</h2>
+            <p className="text-gray-500 text-sm">Just tap — no typing needed!</p>
+          </div>
+          <Card className="p-5">
+            <div className="flex justify-between items-center mb-3">
+              <span className="font-semibold text-gray-700">Severity</span>
+              <span className="font-bold text-sm" style={{color:sevColor}}>{sev}/10 — {sevLabel}</span>
+            </div>
+            <input type="range" min={1} max={10} value={sev} onChange={e=>setSev(+e.target.value)} className="w-full"
+              style={{background:`linear-gradient(to right,${sevColor} ${sev*10}%,#E5E7EB ${sev*10}%)`}} />
+            <div className="flex justify-between text-xs text-gray-400 mt-2">
+              <span>Clear skin</span><span>Moderate</span><span>Very severe</span>
+            </div>
+          </Card>
+
+          <div>
+            <p className="font-semibold text-gray-700 mb-2">How is {profile.name} feeling?</p>
+            <div className="flex gap-2">
+              {MOODS.map(m => (
+                <button key={m.emoji} onClick={()=>setMood(m.emoji)}
+                  className="flex-1 flex flex-col items-center py-3 rounded-2xl border-2 transition-all active:scale-95"
+                  style={mood===m.emoji?{borderColor:pc,background:pc+'15'}:{borderColor:'#E5E7EB',background:'white'}}>
+                  <span className="text-2xl">{m.emoji}</span>
+                  <span className="text-xs text-gray-500 mt-1">{m.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <button onClick={()=>setStep(2)} disabled={!mood}
+            className="w-full py-4 rounded-2xl font-bold text-lg text-white transition-all active:scale-98"
+            style={{background:mood?pc:'#D1D5DB',opacity:mood?1:0.7}}>
+            Next →
+          </button>
+        </div>
+      )}
+
+      {/* Step 2 – Body areas */}
+      {step===2 && (
+        <div className="px-5 fade-in space-y-4">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-800 mb-0.5">Where is it flaring?</h2>
+            <p className="text-gray-500 text-sm">Tap all that apply — or skip if clear 👍</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {BODY_AREAS.map(a => (
+              <button key={a} onClick={()=>toggle(setAreas,a)}
+                className="py-3 px-4 rounded-xl text-sm font-medium text-left transition-all active:scale-95"
+                style={areas.includes(a)?{background:pc,color:'white'}:{background:'#F3F4F6',color:'#374151'}}>
+                {areas.includes(a)?'✓ ':''}{a}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-3">
+            <button onClick={()=>setStep(1)} className="flex-1 py-4 rounded-2xl border-2 border-gray-200 text-gray-600 font-medium">← Back</button>
+            <button onClick={()=>setStep(3)} className="flex-1 py-4 rounded-2xl text-white font-bold" style={{background:pc}}>Next →</button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 3 – Triggers */}
+      {step===3 && (
+        <div className="px-5 fade-in space-y-4">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-800 mb-0.5">Any triggers today?</h2>
+            <p className="text-gray-500 text-sm">Tap what might have caused it — or skip!</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {TRIGGERS.map(t => (
+              <button key={t} onClick={()=>toggle(setTrigs,t)}
+                className="py-3 px-4 rounded-xl text-sm font-medium text-left transition-all active:scale-95"
+                style={trigs.includes(t)?{background:pc,color:'white'}:{background:'#F3F4F6',color:'#374151'}}>
+                {trigs.includes(t)?'✓ ':''}{t}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-3">
+            <button onClick={()=>setStep(2)} className="flex-1 py-4 rounded-2xl border-2 border-gray-200 text-gray-600 font-medium">← Back</button>
+            <button onClick={()=>setStep(4)} className="flex-1 py-4 rounded-2xl text-white font-bold" style={{background:pc}}>Next →</button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 4 – Review & Save */}
+      {step===4 && (
+        <div className="px-5 fade-in space-y-4">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-800 mb-0.5">Anything to add?</h2>
+            <p className="text-gray-500 text-sm">Optional — just tap Save if you're in a rush!</p>
+          </div>
+          <div className="rounded-2xl p-4 border-2" style={{background:pc+'08',borderColor:pc+'30'}}>
+            <div className="text-sm font-bold mb-2" style={{color:pc}}>📋 {profile.name}'s Summary</div>
+            {[
+              {label:'Severity', val:`${sev}/10 ${sevLabel}`},
+              {label:'Mood',     val:mood},
+              {label:'Areas',    val:areas.length?areas.slice(0,3).join(', ')+(areas.length>3?` +${areas.length-3}`:''):'None affected'},
+              {label:'Triggers', val:trigs.length?trigs.slice(0,2).join(', ')+(trigs.length>2?` +${trigs.length-2}`:''):'None noted'},
+            ].map(r => (
+              <div key={r.label} className="flex justify-between py-1.5 border-b border-gray-100 last:border-0">
+                <span className="text-gray-500 text-sm">{r.label}</span>
+                <span className="text-gray-800 text-sm font-medium text-right max-w-[200px] truncate">{r.val}</span>
+              </div>
+            ))}
+          </div>
+          <textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={3}
+            placeholder={`"Tried new shampoo — definitely a trigger!" Totally optional 😊`}
+            className="w-full bg-gray-50 border-2 border-gray-100 focus:border-purple-300 rounded-2xl p-4 text-sm text-gray-700 resize-none transition-colors" />
+          <PhotoAnalysis profileName={profile.name} profileColor={pc} />
+          <div className="flex gap-3">
+            <button onClick={()=>setStep(3)} className="flex-1 py-4 rounded-2xl border-2 border-gray-200 text-gray-600 font-medium">← Back</button>
+            <button onClick={doSave} className="flex-1 py-4 rounded-2xl text-white font-bold shadow-lg" style={{background:'#22C55E'}}>
+              Save ✓
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ═══════════════════════════════════════════
+   SCAN
+═══════════════════════════════════════════ */
+const Scan = ({profile, onUpdateProfile}) => {
+  const [scanning, setScanning] = useState(false);
+  const [result,   setResult]   = useState(null);
+  const [search,   setSearch]   = useState('');
+  const pc = profile.color;
+
+  const rCfg = {
+    safe:    {bg:'#F0FDF4',border:'#86EFAC',badge:'bg-green-500', icon:'✅',label:'Eczema Friendly'},
+    caution: {bg:'#FFFBEB',border:'#FCD34D',badge:'bg-amber-500', icon:'⚠️',label:'Use With Caution'},
+    avoid:   {bg:'#FFF1F2',border:'#FCA5A5',badge:'bg-red-500',   icon:'🚫',label:'Avoid'},
+  };
+
+  const simulateScan = () => {
+    setScanning(true); setResult(null);
+    setTimeout(()=>{
+      setResult(FAKE_SCAN_RESULTS[Math.floor(Math.random()*FAKE_SCAN_RESULTS.length)]);
+      setScanning(false);
+    },2200);
+  };
+
+  const saveProduct = () => {
+    if(!result||profile.savedProducts.find(s=>s.name===result.name)) return;
+    onUpdateProfile(p=>({...p,savedProducts:[...p.savedProducts,{id:Date.now(),name:result.name,rating:result.rating,score:result.score,note:result.note}]}));
+    setResult(null);
+  };
+
+  const filtered = profile.savedProducts.filter(p=>!search||p.name.toLowerCase().includes(search.toLowerCase()));
+
+  return (
+    <div className="slide-up pb-28 px-4 pt-4 space-y-3">
+      {!result && (
+        <>
+          <div className="bg-gray-900 rounded-3xl overflow-hidden h-52 flex items-center justify-center">
+            {scanning ? (
+              <div className="flex flex-col items-center">
+                <div className="w-44 h-28 border-2 border-green-400 rounded-xl relative overflow-hidden">
+                  <div className="scan-line left-0 right-0 h-0.5 bg-green-400" />
+                  {[['top-0 left-0','border-t-4 border-l-4'],['top-0 right-0','border-t-4 border-r-4'],
+                    ['bottom-0 left-0','border-b-4 border-l-4'],['bottom-0 right-0','border-b-4 border-r-4']].map(([pos,cls])=>(
+                    <div key={pos} className={`absolute w-5 h-5 border-green-400 ${pos} ${cls}`} />
+                  ))}
+                </div>
+                <p className="text-green-400 mt-3 text-sm animate-pulse font-medium">Analysing product ingredients…</p>
+              </div>
+            ):(
+              <div className="flex flex-col items-center">
+                <div className="text-4xl mb-2">📷</div>
+                <p className="text-gray-400 text-sm text-center px-10 mb-3">Point camera at product barcode</p>
+                <button onClick={simulateScan}
+                  className="text-white px-7 py-2.5 rounded-xl font-semibold text-sm active:scale-95"
+                  style={{background:pc}}>
+                  Scan Barcode (Demo)
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="relative">
+            <input value={search} onChange={e=>setSearch(e.target.value)}
+              placeholder="Search saved products…"
+              className="w-full bg-gray-100 rounded-2xl py-4 pl-5 pr-12 text-gray-700 text-sm" />
+            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xl">🔍</span>
+          </div>
+        </>
+      )}
+
+      {result && (() => {
+        const cfg = rCfg[result.rating];
+        return (
+          <div className="pop-in space-y-3">
+            <div className="rounded-3xl p-5 border-2" style={{background:cfg.bg,borderColor:cfg.border}}>
+              <div className="flex justify-between items-start mb-3">
+                <div className="flex-1 pr-3">
+                  <h3 className="font-bold text-gray-800 text-base leading-snug">{result.name}</h3>
+                  <p className="text-gray-500 text-sm">{result.brand}</p>
+                </div>
+                <div className="text-center flex-shrink-0">
+                  <div className="text-2xl font-black text-gray-800">{result.score}</div>
+                  <div className="text-xs text-gray-400">/ 10</div>
+                </div>
+              </div>
+              <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-white text-sm font-semibold mb-3 ${cfg.badge}`}>
+                {cfg.icon} {cfg.label}
+              </span>
+              <p className="text-gray-600 text-sm mb-3 leading-relaxed">{result.note}</p>
+              {result.concerns.length > 0 && (
+                <div className="bg-white/70 rounded-2xl p-3 mb-3">
+                  <p className="font-semibold text-gray-700 text-sm mb-1.5">⚠️ Concerns</p>
+                  {result.concerns.map((c,i)=><p key={i} className="text-sm text-gray-600">• {c}</p>)}
+                </div>
+              )}
+              <div className="bg-white/70 rounded-2xl p-3">
+                <p className="font-semibold text-gray-700 text-sm mb-1.5">🧪 Key Ingredients</p>
+                <p className="text-sm text-gray-600">{result.keyIngredients.join(' · ')}</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={saveProduct}
+                className="flex-1 py-3.5 rounded-2xl text-white font-semibold text-sm active:scale-95"
+                style={{background:pc}}>
+                💾 Save to {profile.name}'s Products
+              </button>
+              <button onClick={()=>setResult(null)}
+                className="flex-1 py-3.5 rounded-2xl border-2 border-gray-200 text-gray-600 font-medium text-sm active:scale-95">
+                🔄 Scan Another
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
+      <div>
+        <div className="font-bold text-gray-800 text-lg mb-2">{profile.name}'s Saved Products</div>
+        {filtered.length === 0 && (
+          <div className="text-center py-10 text-gray-400">
+            <div className="text-4xl mb-2">🧴</div>
+            <p className="text-sm">{search ? 'No products match your search' : 'No saved products yet'}</p>
+            {!search && <p className="text-xs mt-1">Scan a product to add it here!</p>}
+          </div>
+        )}
+        {filtered.map(p => (
+          <Card key={p.id} className="p-4 mb-2 flex items-center gap-3">
+            <div className="text-xl">
+              {p.rating==='safe'?'✅':p.rating==='caution'?'⚠️':'🚫'}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-medium text-gray-700 text-sm truncate">{p.name}</div>
+              <div className="text-gray-400 text-xs">{p.note}</div>
+            </div>
+            <SeverityBadge score={p.score} />
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+/* ═══════════════════════════════════════════
+   APPOINTMENTS
+═══════════════════════════════════════════ */
+const Appointments = ({profile, onUpdateProfile}) => {
+  const [showForm, setShowForm] = useState(false);
+  const [view,     setView]     = useState('upcoming');
+  const [form,     setForm]     = useState({date:'',time:'',doctor:'',type:'GP',location:'',notes:''});
+  const pc  = profile.color;
+  const upd = k => e => setForm(p=>({...p,[k]:e.target.value}));
+
+  const save = () => {
+    onUpdateProfile(p=>({...p,appointments:[...p.appointments,{...form,id:Date.now(),upcoming:new Date(form.date)>=new Date()}]}));
+    setShowForm(false);
+    setForm({date:'',time:'',doctor:'',type:'GP',location:'',notes:''});
+  };
+
+  const upcoming = profile.appointments.filter(a=>a.upcoming);
+  const past     = profile.appointments.filter(a=>!a.upcoming);
+  const list     = view==='upcoming'?upcoming:past;
+  const inp      = 'w-full bg-white rounded-xl px-4 py-3 text-sm border-2 border-gray-100 focus:border-purple-300 transition-colors';
+
+  return (
+    <div className="slide-up pb-28 px-4 pt-4 space-y-3">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-800">Appointments</h2>
+          <p className="text-gray-500 text-sm">{profile.name}'s medical visits</p>
+        </div>
+        <button onClick={()=>setShowForm(p=>!p)}
+          className="text-white px-4 py-2.5 rounded-xl text-sm font-semibold active:scale-95 shadow-md"
+          style={{background:pc}}>
+          + Add
+        </button>
+      </div>
+
+      {showForm && (
+        <div className="rounded-3xl p-5 pop-in space-y-3" style={{background:pc+'08',border:`2px solid ${pc}30`}}>
+          <div className="font-bold text-gray-800">New Appointment 📅</div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="text-xs text-gray-500 mb-1 block">Date</label><input type="date" value={form.date} onChange={upd('date')} className={inp} /></div>
+            <div><label className="text-xs text-gray-500 mb-1 block">Time</label><input type="time" value={form.time} onChange={upd('time')} className={inp} /></div>
+          </div>
+          <input placeholder="Doctor / specialist name" value={form.doctor} onChange={upd('doctor')} className={inp} />
+          <select value={form.type} onChange={upd('type')} className={inp}>
+            {APPT_TYPES.map(t=><option key={t}>{t}</option>)}
+          </select>
+          <input placeholder="Clinic / location" value={form.location} onChange={upd('location')} className={inp} />
+          <textarea placeholder="Notes, questions to ask, prescription changes…" value={form.notes} onChange={upd('notes')}
+            className={`${inp} resize-none`} rows={2} />
+          <div className="flex gap-2">
+            <button onClick={()=>setShowForm(false)} className="flex-1 py-3 rounded-xl border-2 border-gray-200 text-gray-600 text-sm font-medium">Cancel</button>
+            <button onClick={save} className="flex-1 py-3 rounded-xl text-white font-bold text-sm" style={{background:pc}}>Save</button>
+          </div>
+        </div>
+      )}
+
+      {/* Tab toggle */}
+      <div className="flex bg-gray-100 rounded-2xl p-1">
+        {[['upcoming','Upcoming'],['past','Past']].map(([v,l])=>(
+          <button key={v} onClick={()=>setView(v)}
+            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${view===v?'bg-white shadow':''}`}
+            style={view===v?{color:pc}:{color:'#9CA3AF'}}>
+            {l} ({v==='upcoming'?upcoming.length:past.length})
+          </button>
+        ))}
+      </div>
+
+      {/* Next appointment hero */}
+      {view==='upcoming'&&upcoming.length>0 && (
+        <div className="rounded-2xl p-4 flex items-center gap-3 text-white"
+          style={{background:`linear-gradient(135deg,${pc} 0%,${pc}AA 100%)`}}>
+          <div className="text-3xl">{APPT_EMOJI[upcoming[0].type]||'🏥'}</div>
+          <div>
+            <p className="text-white/70 text-xs">Next appointment</p>
+            <p className="font-bold">{upcoming[0].doctor}</p>
+            <p className="text-white/70 text-sm">{upcoming[0].date} at {upcoming[0].time} · {upcoming[0].location}</p>
+          </div>
+        </div>
+      )}
+
+      {/* List */}
+      {list.map(a=>(
+        <Card key={a.id} className="p-4">
+          <div className="flex gap-3">
+            <div className="text-3xl">{APPT_EMOJI[a.type]||'🏥'}</div>
+            <div className="flex-1 min-w-0">
+              <div className="flex justify-between items-start">
+                <div>
+                  <div className="font-bold text-gray-800">{a.doctor}</div>
+                  <div className="text-sm font-medium" style={{color:pc}}>{a.type}</div>
+                </div>
+                <div className="text-right flex-shrink-0 ml-2">
+                  <div className="text-sm font-semibold text-gray-700">{a.date}</div>
+                  <div className="text-xs text-gray-400">{a.time}</div>
+                </div>
+              </div>
+              {a.location && <p className="text-gray-500 text-xs mt-1">📍 {a.location}</p>}
+              {a.notes && <div className="bg-gray-50 rounded-xl p-3 mt-2 text-sm text-gray-600 leading-relaxed">{a.notes}</div>}
+            </div>
+          </div>
+        </Card>
+      ))}
+
+      {list.length===0 && (
+        <div className="text-center py-12 text-gray-400">
+          <div className="text-4xl mb-2">📅</div>
+          <p>No {view} appointments for {profile.name}</p>
+          <p className="text-sm mt-1">Tap + Add to add one</p>
+        </div>
+      )}
+
+            <button onClick={()=>generateDoctorPDF(profile)}
+        className="w-full py-4 rounded-2xl border-2 text-sm flex items-center justify-center gap-2 font-bold transition-all active:scale-95 shadow-sm"
+        style={{borderColor:pc,color:'white',background:pc}}>
+        📄 Download Doctor Report PDF
+      </button>
+
+    </div>
+  );
+};
+
+/* ═══════════════════════════════════════════
+   CHAT
+═══════════════════════════════════════════ */
+const Chat = ({profile}) => {
+  const [messages, setMessages] = useState([{
+    id:1, from:'ai',
+    text:`Hi there! 👋 I'm your eczema assistant, here to help with ${profile.name}'s skin.\n\nI'm packed with expert knowledge, but I'm not a substitute for your doctor — always check with your GP or dermatologist for personal medical advice.\n\nWhat would you like to know today? 💜`,
+  }]);
+  const [input,  setInput]  = useState('');
+  const [typing, setTyping] = useState(false);
+  const endRef = useRef(null);
+  const pc = profile.color;
+
+  const suggestions = ['💧 Best moisturisers?','🛁 Bath time tips','😴 Help with sleep','🍎 Food triggers?','💊 Steroid creams','✋ Stop the scratching!','🔍 What causes flares?'];
+
+  const getReply = msg => {
+    const low = msg.toLowerCase();
+    for (const item of AI_KB) {
+      if (item.keys.some(k=>low.includes(k))) return item.reply;
+    }
+    return `That's a great question! 🌟\n\nFor personalised advice about ${profile.name}, please speak to your GP or dermatologist. The main pillars of eczema care are:\n\n• **Regular moisturising** — at least 2–3 times daily\n• **Identifying triggers** — use the Track tab to spot patterns\n• **Following your treatment plan** — prescribed creams used correctly\n• **Good sleep habits** — a cool, cotton-bedded room helps\n\nTry one of the suggestion buttons below! 💜`;
+  };
+
+  const send = text => {
+    const msg = (text||input).trim();
+    if (!msg) return;
+    setMessages(p=>[...p,{id:Date.now(),from:'user',text:msg}]);
+    setInput('');
+    setTyping(true);
+    setTimeout(()=>{
+      setMessages(p=>[...p,{id:Date.now()+1,from:'ai',text:getReply(msg)}]);
+      setTyping(false);
+    },1400+Math.random()*600);
+  };
+
+  useEffect(()=>{ endRef.current?.scrollIntoView({behavior:'smooth'}); },[messages,typing]);
+
+  const fmt = txt => txt.split('\n').map((line,i)=>{
+    const parts = line.split(/\*\*(.*?)\*\*/g);
+    return <span key={i}>{parts.map((p,j)=>j%2===1?<strong key={j}>{p}</strong>:p)}{i<txt.split('\n').length-1&&<br/>}</span>;
+  });
+
+  return (
+    <div className="flex flex-col" style={{height:'calc(100vh - 100px)'}}>
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto px-4 pt-3 pb-2 space-y-3">
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 flex gap-2">
+          <span className="text-sm flex-shrink-0">⚕️</span>
+          <p className="text-amber-700 text-xs leading-relaxed">General info only — always consult your healthcare provider for medical advice about {profile.name}.</p>
+        </div>
+
+        {messages.map(m=>(
+          <div key={m.id} className={`flex items-end gap-2 fade-in ${m.from==='user'?'flex-row-reverse':''}`}>
+            {m.from==='ai' && (
+              <div className="w-8 h-8 rounded-full flex items-center justify-center text-base flex-shrink-0"
+                style={{background:pc+'20'}}>🤖</div>
+            )}
+            <div className={`max-w-xs px-4 py-3 rounded-3xl text-sm leading-relaxed ${m.from==='user'?'text-white rounded-br-sm':'bg-white border border-gray-100 shadow-sm text-gray-700 rounded-bl-sm'}`}
+              style={m.from==='user'?{background:pc}:{}}>
+              {fmt(m.text)}
+            </div>
+          </div>
+        ))}
+
+        {typing && (
+          <div className="flex items-end gap-2 fade-in">
+            <div className="w-8 h-8 rounded-full flex items-center justify-center text-base flex-shrink-0"
+              style={{background:pc+'20'}}>🤖</div>
+            <div className="bg-white border border-gray-100 shadow-sm px-4 py-3 rounded-3xl rounded-bl-sm flex items-center gap-1" style={{height:44}}>
+              <div className="dot"/><div className="dot"/><div className="dot"/>
+            </div>
+          </div>
+        )}
+        <div ref={endRef} />
+      </div>
+
+      {/* Suggestions */}
+      <div className="px-4 pb-2">
+        <div className="flex gap-2 overflow-x-auto no-scroll pb-1">
+          {suggestions.map(s=>(
+            <button key={s} onClick={()=>send(s)}
+              className="flex-shrink-0 text-xs px-3 py-2 rounded-xl border whitespace-nowrap active:scale-95 transition-all"
+              style={{background:pc+'10',color:pc,borderColor:pc+'30'}}>
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Input */}
+      <div className="px-4 pb-28">
+        <div className="flex gap-2 bg-gray-100 rounded-2xl p-1.5">
+          <input value={input} onChange={e=>setInput(e.target.value)}
+            onKeyDown={e=>e.key==='Enter'&&send()}
+            placeholder="Ask anything about eczema…"
+            className="flex-1 bg-transparent px-3 py-2 text-gray-700 text-sm" />
+          <button onClick={()=>send()}
+            className="w-10 h-10 rounded-xl flex items-center justify-center text-base flex-shrink-0 text-white active:scale-95 transition-all"
+            style={{background:pc}}>
+            ➤
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+/* ═══════════════════════════════════════════
+   COMMUNITY DATA
+═══════════════════════════════════════════ */
+const COMMUNITY_FEED = [
+  {id:1,author:'Sarah M.',avatar:'👩',childAge:'2 years',allergyType:'Dairy',timeAgo:'2h ago',type:'win',tag:'🏆 Win',tagColor:'#22C55E',text:'Week 3 of cutting out dairy and the difference in Maya\'s skin is unreal. Don\'t give up — it takes time but it works! 🎉',likes:34,comments:12},
+  {id:2,author:'James T.',avatar:'👨',childAge:'5 years',allergyType:'Dust Mites',timeAgo:'4h ago',type:'tip',tag:'💡 Tip',tagColor:'#7C3AED',text:'Game changer: put bedsheets in a plastic bag in the freezer for 24hrs once a week. Kills dust mites without washing every day. Our son\'s nighttime itching dropped massively.',likes:87,comments:29},
+  {id:3,author:'Priya K.',avatar:'👩',childAge:'8 months',allergyType:'Egg',timeAgo:'6h ago',type:'product',tag:'🧴 Product',tagColor:'#0EA5E9',text:'Just tried Dermol 500 lotion on our little one — absolute lifesaver for bath time. Prescribed by our dermatologist and miles better than anything we bought ourselves.',likes:45,comments:18},
+  {id:4,author:'Lisa R.',avatar:'👩',childAge:'4 years',allergyType:'Pollen',timeAgo:'1d ago',type:'support',tag:'💜 Support',tagColor:'#EC4899',text:'Honest post: had a complete breakdown last night at 2am while my daughter scratched for the 4th hour. This is SO hard. Sending love to every parent up in the night with their little one. You are not alone. 💜',likes:203,comments:67},
+  {id:5,author:'Dev P.',avatar:'👨',childAge:'3 years',allergyType:'Nut',timeAgo:'1d ago',type:'tip',tag:'💡 Tip',tagColor:'#7C3AED',text:'Scratch sleeves from ScratchSleeves.co.uk — wish we\'d found these in month 1 not month 14. Our son sleeps through most nights now. Worth every penny.',likes:112,comments:41},
+  {id:6,author:'Emma W.',avatar:'👩',childAge:'6 years',allergyType:'Wheat',timeAgo:'2d ago',type:'win',tag:'🏆 Win',tagColor:'#22C55E',text:'6 months of food diaries and we FINALLY identified the trigger — wheat. It wasn\'t the obvious stuff, it was hidden gluten in sauces. Allergy testing confirmed it. Keep going with those logs!',likes:156,comments:53},
+  {id:7,author:'Tom B.',avatar:'👨',childAge:'1 year',allergyType:'Dairy',timeAgo:'2d ago',type:'product',tag:'🧴 Product',tagColor:'#0EA5E9',text:'CeraVe Baby Moisturising Cream is the one. Tried 11 different products, this is the only one with no reaction. Check ingredients — ceramides and no fragrance is the magic combo.',likes:78,comments:22},
+  {id:8,author:'Aisha N.',avatar:'👩',childAge:'7 years',allergyType:'Multiple',timeAgo:'3d ago',type:'tip',tag:'💡 Tip',tagColor:'#7C3AED',text:'Our school nurse didn\'t know about eczema action plans — I created one with our dermatologist and gave it to the teacher. School trips and PE are no longer a nightmare. Ask your GP about one!',likes:94,comments:31},
+];
+
+const BUDDY_QUESTIONS = [
+  {id:'severity',   q:'What is the average severity of flare-ups?',     type:'scale', options:['1-3 Mild','4-6 Moderate','7-10 Severe']},
+  {id:'frequency',  q:'How often do flare-ups occur?',                   type:'choice',options:['Daily','A few times a week','Weekly','Monthly']},
+  {id:'itch',       q:'How disruptive is the itching at night?',         type:'choice',options:['Sleeps through','Wakes occasionally','Wakes most nights','Barely sleeps']},
+  {id:'allergy',    q:'Any confirmed allergies?',                        type:'multi', options:['Dairy','Egg','Wheat','Nuts','Pollen','Dust Mites','Pet Hair','None confirmed']},
+  {id:'childAge',   q:'How old is your child?',                         type:'choice',options:['0–6 months','6–12 months','1–3 years','4–7 years','8–12 years','Teen or adult']},
+  {id:'treatment',  q:'What treatments are you currently using?',        type:'multi', options:['Emollients only','Mild steroids','Moderate steroids','Wet wraps','Antihistamines','Immunosuppressants']},
+  {id:'goal',       q:'What are you most looking for in an Eczema Buddy?',type:'choice',options:['Someone to vent to','Share product tips','Compare treatment approaches','General motivation','All of the above']},
+];
+
+const BUDDY_MATCHES = [
+  {id:1,name:'Sarah M.',avatar:'👩',location:'Manchester',match:94,childName:'Mia',childAge:'2.5 years',severity:'Moderate–Severe',allergies:['Dairy','Dust Mites'],goal:'Share tips & motivation',online:true, intro:'Mum to Mia who has had eczema since 3 months. Dairy-free journey has helped a lot. Always happy to chat at 2am! 💜'},
+  {id:2,name:'James T.',avatar:'👨',location:'Bristol',match:87,childName:'Luca',childAge:'5 years',severity:'Moderate',allergies:['Dust Mites','Pollen'],goal:'All of the above',online:false, intro:'Dad to Luca — we\'ve tried everything and happy to share what worked and what didn\'t. Dust mite protocol changed our lives.'},
+  {id:3,name:'Priya K.',avatar:'👩',location:'London',match:81,childName:'Arjun',childAge:'10 months',severity:'Severe',allergies:['Dairy','Egg'],goal:'General motivation',online:true, intro:'First time mum going through it with baby Arjun. Looking for a buddy who just gets it — no judgment, just support.'},
+  {id:4,name:'Lisa R.',avatar:'👩',location:'Leeds',match:76,childName:'Ella',childAge:'4 years',severity:'Mild–Moderate',allergies:['Pollen','Pet Hair'],goal:'Compare treatments',online:false, intro:'Ella\'s eczema is mostly seasonal. Happy to share what helps during high pollen season and our morning routine.'},
+];
+
+const FEED_FILTERS = {
+  type:     ['All','Win','Tip','Product','Support'],
+  childAge: ['All Ages','0–6 months','6–12 months','1–3 years','4–7 years','8+ years'],
+  allergy:  ['All Allergies','Dairy','Egg','Wheat','Nuts','Pollen','Dust Mites','Multiple'],
+};
+
+/* ═══════════════════════════════════════════
+   COMMUNITY COMPONENT
+═══════════════════════════════════════════ */
+const Community = ({profile}) => {
+  const [subTab,       setSubTab]       = useState('feed');
+  const [feedFilter,   setFeedFilter]   = useState({type:'All',childAge:'All Ages',allergy:'All Allergies'});
+  const [buddyStep,    setBuddyStep]    = useState('intro'); // intro | questions | results | chat
+  const [answers,      setAnswers]      = useState({});
+  const [qIndex,       setQIndex]       = useState(0);
+  const [activeBuddy,  setActiveBuddy]  = useState(null);
+  const [chatInput,    setChatInput]    = useState('');
+  const [likedPosts,   setLikedPosts]   = useState([]);
+  const [chatMessages, setChatMessages] = useState([]);
+  const pc = profile.color;
+
+  /* ── Feed filtering ── */
+  const filteredFeed = COMMUNITY_FEED.filter(p => {
+    if (feedFilter.type !== 'All' && p.type !== feedFilter.type.toLowerCase()) return false;
+    if (feedFilter.childAge !== 'All Ages' && p.childAge !== feedFilter.childAge) return false;
+    if (feedFilter.allergy !== 'All Allergies' && p.allergyType !== feedFilter.allergy) return false;
+    return true;
+  });
+
+  /* ── Buddy questionnaire ── */
+  const currentQ   = BUDDY_QUESTIONS[qIndex];
+  const totalQ     = BUDDY_QUESTIONS.length;
+  const progress   = ((qIndex) / totalQ) * 100;
+
+  const handleAnswer = (val) => {
+    const q = currentQ;
+    if (q.type === 'multi') {
+      const prev = answers[q.id] || [];
+      const next = prev.includes(val) ? prev.filter(v=>v!==val) : [...prev,val];
+      setAnswers(a=>({...a,[q.id]:next}));
+    } else {
+      setAnswers(a=>({...a,[q.id]:val}));
+      if (qIndex < totalQ - 1) setTimeout(()=>setQIndex(i=>i+1), 300);
+      else setTimeout(()=>setBuddyStep('results'), 300);
+    }
+  };
+
+  const openChat = (buddy) => {
+    setActiveBuddy(buddy);
+    setChatMessages([{
+      id:1, from:'buddy',
+      text:`Hi! 👋 I'm ${buddy.name}. I saw we matched and thought I'd say hello! How is your little one doing at the moment?`
+    }]);
+    setBuddyStep('chat');
+  };
+
+  const sendChat = () => {
+    if (!chatInput.trim()) return;
+    const msg = {id:Date.now(),from:'me',text:chatInput.trim()};
+    setChatMessages(p=>[...p,msg]);
+    setChatInput('');
+    setTimeout(()=>{
+      const replies = [
+        "Oh yes we went through exactly that! What helped us most was switching to Dermol for bath time 💙",
+        "You're doing amazingly — it's so hard but you are NOT alone in this 💜",
+        "Have you tried wet wraps? Game changer for us on the really bad nights!",
+        "Yes! Our dermatologist said the same thing. Definitely worth pushing for a referral if you haven't already.",
+        "Sending you so much love — the night wakings are exhausting. Does your little one respond to cool compresses? 🧊",
+      ];
+      setChatMessages(p=>[...p,{id:Date.now()+1,from:'buddy',text:replies[Math.floor(Math.random()*replies.length)]}]);
+    },1500);
+  };
+
+  /* ── Render ── */
+  return (
+    <div className="slide-up pb-28">
+
+      {/* Sub-tab nav */}
+      <div className="px-4 pt-3 pb-2">
+        <div className="flex bg-gray-100 rounded-2xl p-1">
+          {[['feed','🌍 Feed'],['buddy','👯 Buddy']].map(([v,l])=>(
+            <button key={v} onClick={()=>setSubTab(v)}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all"
+              style={subTab===v?{background:pc,color:'white'}:{color:'#6B7280'}}>
+              {l}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ════════════════ FEED ════════════════ */}
+      {subTab==='feed' && (
+        <div className="px-4 space-y-3">
+
+          {/* Filter row - Type */}
+          <div className="flex gap-2 overflow-x-auto no-scroll pb-1">
+            {FEED_FILTERS.type.map(f=>(
+              <button key={f} onClick={()=>setFeedFilter(p=>({...p,type:f}))}
+                className="flex-shrink-0 text-xs px-3 py-2 rounded-xl font-semibold border transition-all"
+                style={feedFilter.type===f?{background:pc,color:'white',borderColor:pc}:{background:'white',color:'#6B7280',borderColor:'#E5E7EB'}}>
+                {f}
+              </button>
+            ))}
+          </div>
+
+          {/* Filter row - Age */}
+          <div className="flex gap-2 overflow-x-auto no-scroll pb-1">
+            {FEED_FILTERS.childAge.map(f=>(
+              <button key={f} onClick={()=>setFeedFilter(p=>({...p,childAge:f}))}
+                className="flex-shrink-0 text-xs px-3 py-2 rounded-xl font-medium border transition-all"
+                style={feedFilter.childAge===f?{background:'#F0FDF4',color:'#16A34A',borderColor:'#86EFAC'}:{background:'white',color:'#9CA3AF',borderColor:'#F3F4F6'}}>
+                👶 {f}
+              </button>
+            ))}
+          </div>
+
+          {/* Filter row - Allergy */}
+          <div className="flex gap-2 overflow-x-auto no-scroll pb-1">
+            {FEED_FILTERS.allergy.map(f=>(
+              <button key={f} onClick={()=>setFeedFilter(p=>({...p,allergy:f}))}
+                className="flex-shrink-0 text-xs px-3 py-2 rounded-xl font-medium border transition-all"
+                style={feedFilter.allergy===f?{background:'#FFF7ED',color:'#EA580C',borderColor:'#FED7AA'}:{background:'white',color:'#9CA3AF',borderColor:'#F3F4F6'}}>
+                🌿 {f}
+              </button>
+            ))}
+          </div>
+
+          {/* Post count */}
+          <p className="text-xs text-gray-400">{filteredFeed.length} post{filteredFeed.length!==1?'s':''} matching your filters</p>
+
+          {/* Share box */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex gap-3 items-center">
+            <div className="w-9 h-9 rounded-full flex items-center justify-center text-lg flex-shrink-0"
+              style={{background:pc+'20'}}>{profile.emoji}</div>
+            <button className="flex-1 text-left text-gray-400 text-sm bg-gray-50 rounded-xl px-4 py-2.5">
+              Share a tip, win or question…
+            </button>
+          </div>
+
+          {/* Posts */}
+          {filteredFeed.length === 0 && (
+            <div className="text-center py-12 text-gray-400">
+              <div className="text-4xl mb-2">🔍</div>
+              <p className="font-medium">No posts match these filters</p>
+              <p className="text-sm mt-1">Try adjusting the filters above</p>
+            </div>
+          )}
+
+          {filteredFeed.map(post=>(
+            <div key={post.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
+              {/* Header */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-lg bg-gray-100">{post.avatar}</div>
+                  <div>
+                    <p className="font-semibold text-gray-800 text-sm">{post.author}</p>
+                    <p className="text-gray-400 text-xs">Child: {post.childAge} · {post.allergyType} · {post.timeAgo}</p>
+                  </div>
+                </div>
+                <span className="text-xs font-bold px-2.5 py-1 rounded-full text-white" style={{background:post.tagColor}}>{post.tag}</span>
+              </div>
+
+              {/* Text */}
+              <p className="text-gray-700 text-sm leading-relaxed">{post.text}</p>
+
+              {/* Actions */}
+              <div className="flex items-center gap-4 pt-1 border-t border-gray-50">
+                <button onClick={()=>setLikedPosts(p=>p.includes(post.id)?p.filter(i=>i!==post.id):[...p,post.id])}
+                  className="flex items-center gap-1.5 active:scale-95 transition-all">
+                  <span className="text-base">{likedPosts.includes(post.id)?'❤️':'🤍'}</span>
+                  <span className="text-xs font-semibold text-gray-500">{post.likes + (likedPosts.includes(post.id)?1:0)}</span>
+                </button>
+                <button className="flex items-center gap-1.5">
+                  <span className="text-base">💬</span>
+                  <span className="text-xs font-semibold text-gray-500">{post.comments}</span>
+                </button>
+                <button className="flex items-center gap-1.5 ml-auto">
+                  <span className="text-base">📤</span>
+                  <span className="text-xs text-gray-400">Share</span>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ════════════════ BUDDY ════════════════ */}
+      {subTab==='buddy' && (
+        <div className="px-4 space-y-3">
+
+          {/* INTRO */}
+          {buddyStep==='intro' && (
+            <div className="space-y-3 fade-in">
+              <div className="rounded-2xl p-5 text-center" style={{background:pc+'10',border:`2px solid ${pc}25`}}>
+                <div className="text-5xl mb-3">👯</div>
+                <h3 className="font-black text-gray-800 text-xl mb-1">Eczema Buddy</h3>
+                <p className="text-gray-500 text-sm leading-relaxed">
+                  Match with another parent going through the same journey — same severity, same triggers, same sleepless nights.
+                </p>
+              </div>
+              {[
+                {icon:'📋',title:'Answer 7 quick questions',desc:'Severity, triggers, allergies, goals'},
+                {icon:'🤝',title:'Get matched by % compatibility',desc:'Based on your child\'s eczema profile'},
+                {icon:'💬',title:'Chat, share tips & support',desc:'You\'re not in this alone'},
+              ].map(s=>(
+                <div key={s.title} className="bg-white rounded-2xl border border-gray-100 p-4 flex gap-3 items-start">
+                  <div className="text-2xl">{s.icon}</div>
+                  <div>
+                    <p className="font-semibold text-gray-800 text-sm">{s.title}</p>
+                    <p className="text-gray-400 text-xs mt-0.5">{s.desc}</p>
+                  </div>
+                </div>
+              ))}
+              <button onClick={()=>setBuddyStep('questions')}
+                className="w-full py-4 rounded-2xl text-white font-bold text-base shadow-md active:scale-98 transition-all"
+                style={{background:pc}}>
+                Find My Eczema Buddy ✨
+              </button>
+            </div>
+          )}
+
+          {/* QUESTIONS */}
+          {buddyStep==='questions' && (
+            <div className="space-y-4 fade-in">
+              {/* Progress */}
+              <div>
+                <div className="flex justify-between text-xs text-gray-400 mb-1.5">
+                  <span>Question {qIndex+1} of {totalQ}</span>
+                  <span style={{color:pc}}>{Math.round(((qIndex)/totalQ)*100)}% complete</span>
+                </div>
+                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full transition-all duration-500" style={{width:`${progress}%`,background:pc}} />
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                <p className="font-bold text-gray-800 text-base mb-4">{currentQ.q}</p>
+                <div className="space-y-2">
+                  {currentQ.options.map(opt=>{
+                    const sel = currentQ.type==='multi'
+                      ? (answers[currentQ.id]||[]).includes(opt)
+                      : answers[currentQ.id]===opt;
+                    return (
+                      <button key={opt} onClick={()=>handleAnswer(opt)}
+                        className="w-full text-left px-4 py-3.5 rounded-xl text-sm font-medium border-2 transition-all active:scale-98"
+                        style={sel?{borderColor:pc,background:pc+'12',color:pc}:{borderColor:'#F3F4F6',background:'#FAFAFA',color:'#374151'}}>
+                        {sel?'✓ ':''}{opt}
+                      </button>
+                    );
+                  })}
+                </div>
+                {currentQ.type==='multi' && (
+                  <button onClick={()=>{
+                    if(qIndex<totalQ-1) setQIndex(i=>i+1);
+                    else setBuddyStep('results');
+                  }} className="w-full py-3.5 rounded-xl text-white font-bold mt-3 active:scale-98"
+                    style={{background:pc}}>
+                    {qIndex<totalQ-1?'Next →':'Find My Matches ✨'}
+                  </button>
+                )}
+              </div>
+
+              {qIndex > 0 && (
+                <button onClick={()=>setQIndex(i=>i-1)} className="w-full py-3 rounded-xl border-2 border-gray-200 text-gray-500 text-sm font-medium">← Back</button>
+              )}
+            </div>
+          )}
+
+          {/* RESULTS */}
+          {buddyStep==='results' && (
+            <div className="space-y-3 fade-in">
+              <div className="rounded-2xl p-4 text-center" style={{background:pc+'10',border:`1.5px solid ${pc}30`}}>
+                <div className="text-3xl mb-1">🎉</div>
+                <p className="font-black text-gray-800">Your Buddy Matches</p>
+                <p className="text-gray-500 text-xs mt-1">Based on your answers — sorted by compatibility</p>
+              </div>
+
+              {BUDDY_MATCHES.map(buddy=>(
+                <div key={buddy.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
+                  <div className="flex items-start gap-3">
+                    {/* Avatar + online */}
+                    <div className="relative flex-shrink-0">
+                      <div className="w-14 h-14 rounded-full flex items-center justify-center text-2xl bg-gray-100">{buddy.avatar}</div>
+                      {buddy.online && (
+                        <div className="absolute bottom-0 right-0 w-4 h-4 bg-green-400 rounded-full border-2 border-white" />
+                      )}
+                    </div>
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-bold text-gray-800">{buddy.name}</p>
+                          <p className="text-gray-400 text-xs">{buddy.location} · {buddy.online?'Online now':'Offline'}</p>
+                        </div>
+                        {/* Match % badge */}
+                        <div className="text-center flex-shrink-0">
+                          <div className="font-black text-xl" style={{color:buddy.match>=85?'#22C55E':buddy.match>=70?'#F59E0B':'#9CA3AF'}}>
+                            {buddy.match}%
+                          </div>
+                          <div className="text-xs text-gray-400">match</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Match bar */}
+                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full" style={{width:`${buddy.match}%`,background:buddy.match>=85?'#22C55E':buddy.match>=70?'#F59E0B':'#9CA3AF'}} />
+                  </div>
+
+                  {/* Child info chips */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {[`👶 ${buddy.childAge}`,`📊 ${buddy.severity}`,...buddy.allergies.map(a=>`🌿 ${a}`)].map(chip=>(
+                      <span key={chip} className="text-xs bg-gray-50 border border-gray-200 text-gray-600 px-2.5 py-1 rounded-full">{chip}</span>
+                    ))}
+                  </div>
+
+                  {/* Intro */}
+                  <p className="text-gray-500 text-sm leading-relaxed italic">"{buddy.intro}"</p>
+
+                  {/* Actions */}
+                  <div className="flex gap-2">
+                    <button onClick={()=>openChat(buddy)}
+                      className="flex-1 py-3 rounded-xl text-white font-semibold text-sm active:scale-95 transition-all"
+                      style={{background:pc}}>
+                      💬 Start Chat
+                    </button>
+                    <button className="flex-1 py-3 rounded-xl border-2 border-gray-200 text-gray-500 font-medium text-sm active:scale-95">
+                      👤 View Profile
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              <button onClick={()=>{setBuddyStep('intro');setAnswers({});setQIndex(0);}}
+                className="w-full py-3 rounded-2xl border-2 border-dashed border-gray-300 text-gray-400 text-sm">
+                🔄 Redo Questionnaire
+              </button>
+            </div>
+          )}
+
+          {/* CHAT */}
+          {buddyStep==='chat' && activeBuddy && (
+            <div className="fade-in" style={{height:'calc(100vh - 280px)',display:'flex',flexDirection:'column'}}>
+              {/* Chat header */}
+              <div className="bg-white rounded-2xl border border-gray-100 p-3 flex items-center gap-3 mb-3">
+                <button onClick={()=>setBuddyStep('results')} className="text-gray-400 text-lg">←</button>
+                <div className="relative">
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-xl bg-gray-100">{activeBuddy.avatar}</div>
+                  {activeBuddy.online && <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-400 rounded-full border-2 border-white" />}
+                </div>
+                <div>
+                  <p className="font-bold text-gray-800 text-sm">{activeBuddy.name}</p>
+                  <p className="text-xs" style={{color:'#22C55E'}}>{activeBuddy.match}% match · {activeBuddy.online?'Online':'Offline'}</p>
+                </div>
+              </div>
+
+              {/* Messages */}
+              <div className="flex-1 overflow-y-auto space-y-3 mb-3" style={{minHeight:0}}>
+                <div className="bg-amber-50 border border-amber-100 rounded-xl p-2.5 flex gap-2">
+                  <span className="text-xs">🔒</span>
+                  <p className="text-amber-600 text-xs">Private chat — your personal details are protected. Be kind and supportive!</p>
+                </div>
+                {chatMessages.map(m=>(
+                  <div key={m.id} className={`flex ${m.from==='me'?'flex-row-reverse':''} items-end gap-2`}>
+                    {m.from==='buddy' && (
+                      <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-base flex-shrink-0">{activeBuddy.avatar}</div>
+                    )}
+                    <div className="max-w-xs px-4 py-2.5 rounded-2xl text-sm leading-relaxed"
+                      style={m.from==='me'?{background:pc,color:'white',borderBottomRightRadius:4}:{background:'white',border:'1px solid #F3F4F6',color:'#374151',borderBottomLeftRadius:4}}>
+                      {m.text}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Quick replies */}
+              <div className="flex gap-2 overflow-x-auto no-scroll pb-2">
+                {['👋 Hey!','💜 Sending love!','🙏 Thank you!','That really helps!'].map(s=>(
+                  <button key={s} onClick={()=>{setChatInput(s);}}
+                    className="flex-shrink-0 text-xs px-3 py-1.5 rounded-xl border whitespace-nowrap"
+                    style={{background:pc+'10',color:pc,borderColor:pc+'30'}}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+
+              {/* Input */}
+              <div className="flex gap-2 bg-gray-100 rounded-2xl p-1.5">
+                <input value={chatInput} onChange={e=>setChatInput(e.target.value)}
+                  onKeyDown={e=>e.key==='Enter'&&sendChat()}
+                  placeholder="Message your buddy…"
+                  className="flex-1 bg-transparent px-3 py-2 text-gray-700 text-sm" />
+                <button onClick={sendChat}
+                  className="w-10 h-10 rounded-xl flex items-center justify-center text-white flex-shrink-0"
+                  style={{background:pc}}>
+                  ➤
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+/* ═══════════════════════════════════════════
+   DOCTOR PDF EXPORT
+═══════════════════════════════════════════ */
+const generateDoctorPDF = (profile) => {
+  const { jsPDF } = window.jspdf;
+  const doc  = new jsPDF();
+  const pc   = [124, 58, 237]; // purple RGB
+  const gray = [100, 100, 100];
+  const dark = [30, 30, 30];
+  const today = new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+  let y = 0;
+
+  const addPage = () => { doc.addPage(); y = 20; };
+  const checkY = (needed=20) => { if (y + needed > 275) addPage(); };
+
+  /* ── Header banner ── */
+  doc.setFillColor(...pc);
+  doc.rect(0, 0, 210, 38, 'F');
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(20); doc.setFont('helvetica','bold');
+  doc.text('EczemaEase', 14, 16);
+  doc.setFontSize(10); doc.setFont('helvetica','normal');
+  doc.text('Skin Journal Report — Generated for Healthcare Provider', 14, 24);
+  doc.text(`Generated: ${today}`, 14, 31);
+  y = 50;
+
+  /* ── Patient details box ── */
+  doc.setFillColor(245, 243, 255);
+  doc.roundedRect(12, y-6, 186, 30, 3, 3, 'F');
+  doc.setTextColor(...dark); doc.setFontSize(13); doc.setFont('helvetica','bold');
+  doc.text(`${profile.name}  ${profile.emoji||''}`, 18, y+4);
+  doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(...gray);
+  doc.text(`Relationship: ${profile.relationship}   Age: ${profile.age}   Report covers: ${profile.logs.length} log entries`, 18, y+12);
+  y += 34;
+
+  /* ── Disclaimer ── */
+  doc.setFillColor(255, 251, 235);
+  doc.roundedRect(12, y, 186, 12, 2, 2, 'F');
+  doc.setTextColor(146, 64, 14); doc.setFontSize(7.5); doc.setFont('helvetica','italic');
+  doc.text('⚕  This report is for informational purposes only and is not a substitute for professional medical diagnosis or advice.', 16, y+8);
+  y += 20;
+
+  /* ── Section helper ── */
+  const sectionTitle = (title) => {
+    checkY(14);
+    doc.setFillColor(...pc);
+    doc.rect(12, y, 4, 10, 'F');
+    doc.setTextColor(...pc); doc.setFontSize(12); doc.setFont('helvetica','bold');
+    doc.text(title, 20, y+7);
+    y += 16;
+  };
+
+  /* ── Stat row helper ── */
+  const statRow = (label, val, valColor=dark) => {
+    checkY(10);
+    doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(...gray);
+    doc.text(label, 18, y);
+    doc.setFont('helvetica','bold'); doc.setTextColor(...valColor);
+    doc.text(String(val), 90, y);
+    y += 8;
+  };
+
+  /* ── 1. Summary Stats ── */
+  sectionTitle('Summary');
+  const avg = profile.logs.length
+    ? (profile.logs.reduce((s,l)=>s+l.severity,0)/profile.logs.length).toFixed(1)
+    : 'N/A';
+  const severe  = profile.logs.filter(l=>l.severity>=7).length;
+  const moderate= profile.logs.filter(l=>l.severity>=4&&l.severity<7).length;
+  const mild    = profile.logs.filter(l=>l.severity<4).length;
+  const upcoming= profile.appointments.filter(a=>a.upcoming).length;
+
+  statRow('Total Logs Recorded:', profile.logs.length);
+  statRow('Average Severity Score:', `${avg} / 10`, avg>=7?[239,68,68]:avg>=4?[245,158,11]:[34,197,94]);
+  statRow('Severe Days (7–10):', severe, [239,68,68]);
+  statRow('Moderate Days (4–6):', moderate, [245,158,11]);
+  statRow('Mild Days (1–3):', mild, [34,197,94]);
+  statRow('Upcoming Appointments:', upcoming);
+  statRow('Saved Products:', profile.savedProducts.length);
+  y += 4;
+
+  /* ── 2. Recent Logs ── */
+  sectionTitle('Recent Skin Logs (Last 10)');
+  if (profile.logs.length === 0) {
+    doc.setTextColor(...gray); doc.setFontSize(9); doc.setFont('helvetica','italic');
+    doc.text('No logs recorded yet.', 18, y); y += 10;
+  } else {
+    // Table header
+    doc.setFillColor(124, 58, 237);
+    doc.rect(12, y-5, 186, 10, 'F');
+    doc.setTextColor(255,255,255); doc.setFontSize(8); doc.setFont('helvetica','bold');
+    doc.text('Date',     16, y+1);
+    doc.text('Severity', 46, y+1);
+    doc.text('Mood',     72, y+1);
+    doc.text('Areas',    90, y+1);
+    doc.text('Triggers', 135, y+1);
+    y += 10;
+
+    profile.logs.slice(0,10).forEach((log,i) => {
+      checkY(10);
+      if (i%2===0) { doc.setFillColor(248,246,255); doc.rect(12,y-4,186,9,'F'); }
+      const sevColor = log.severity>=7?[239,68,68]:log.severity>=4?[245,158,11]:[34,197,94];
+      doc.setFont('helvetica','normal'); doc.setFontSize(8);
+      doc.setTextColor(...dark);   doc.text(log.date,                                    16, y+1);
+      doc.setTextColor(...sevColor);doc.setFont('helvetica','bold');
+      doc.text(`${log.severity}/10`,                                                      46, y+1);
+      doc.setTextColor(...dark);   doc.setFont('helvetica','normal');
+      doc.text(log.mood||'—',                                                             72, y+1);
+      doc.text((log.areas||[]).slice(0,2).join(', ')||(log.areas||[]).join(', ')||'—',  90, y+1);
+      doc.text((log.triggers||[]).slice(0,2).map(t=>t.split(' ').slice(1).join(' ')).join(', ')||'None', 135, y+1);
+      y += 9;
+    });
+    y += 4;
+  }
+
+  /* ── 3. Trigger Analysis ── */
+  sectionTitle('Trigger Frequency Analysis');
+  const triggerMap = {};
+  profile.logs.forEach(l=>(l.triggers||[]).forEach(t=>{
+    triggerMap[t] = (triggerMap[t]||0)+1;
+  }));
+  const sortedTrigs = Object.entries(triggerMap).sort((a,b)=>b[1]-a[1]);
+
+  if (sortedTrigs.length === 0) {
+    doc.setTextColor(...gray); doc.setFontSize(9); doc.setFont('helvetica','italic');
+    doc.text('No triggers logged yet.', 18, y); y += 10;
+  } else {
+    sortedTrigs.forEach(([trigger, count]) => {
+      checkY(10);
+      const pct = Math.round((count / profile.logs.length) * 100);
+      doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(...dark);
+      doc.text(trigger, 18, y);
+      doc.setTextColor(...gray);
+      doc.text(`${count} occurrences (${pct}% of logs)`, 90, y);
+      // Mini bar
+      doc.setFillColor(229,231,235);
+      doc.rect(148, y-4, 46, 5, 'F');
+      doc.setFillColor(...pc);
+      doc.rect(148, y-4, Math.max(2, 46*(pct/100)), 5, 'F');
+      y += 9;
+    });
+    y += 4;
+  }
+
+  /* ── 4. Most Affected Body Areas ── */
+  sectionTitle('Most Affected Body Areas');
+  const areaMap = {};
+  profile.logs.forEach(l=>(l.areas||[]).forEach(a=>{ areaMap[a]=(areaMap[a]||0)+1; }));
+  const sortedAreas = Object.entries(areaMap).sort((a,b)=>b[1]-a[1]);
+  if (sortedAreas.length === 0) {
+    doc.setTextColor(...gray); doc.setFontSize(9); doc.setFont('helvetica','italic');
+    doc.text('No body areas logged yet.', 18, y); y += 10;
+  } else {
+    sortedAreas.forEach(([area, count]) => {
+      checkY(9);
+      doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(...dark);
+      doc.text(area, 18, y);
+      doc.setTextColor(...gray);
+      doc.text(`${count}x`, 90, y);
+      y += 8;
+    });
+    y += 4;
+  }
+
+  /* ── 5. Appointments ── */
+  sectionTitle('Appointment History');
+  if (profile.appointments.length === 0) {
+    doc.setTextColor(...gray); doc.setFontSize(9); doc.setFont('helvetica','italic');
+    doc.text('No appointments recorded.', 18, y); y += 10;
+  } else {
+    profile.appointments.forEach(a => {
+      checkY(18);
+      doc.setFillColor(a.upcoming?245:248, a.upcoming?243:248, a.upcoming?255:248);
+      doc.roundedRect(12, y-4, 186, 16, 2, 2, 'F');
+      doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(...dark);
+      doc.text(`${a.type} — ${a.doctor}`, 16, y+2);
+      doc.setFont('helvetica','normal'); doc.setTextColor(...gray);
+      doc.text(`${a.date} at ${a.time}  |  ${a.location||''}`, 16, y+8);
+      if (a.upcoming) {
+        doc.setTextColor(...pc); doc.setFont('helvetica','bold');
+        doc.text('UPCOMING', 170, y+2);
+      }
+      y += 20;
+    });
+    y += 4;
+  }
+
+  /* ── 6. Saved Products ── */
+  sectionTitle('Saved Product Safety Ratings');
+  if (profile.savedProducts.length === 0) {
+    doc.setTextColor(...gray); doc.setFontSize(9); doc.setFont('helvetica','italic');
+    doc.text('No products saved yet.', 18, y); y += 10;
+  } else {
+    profile.savedProducts.forEach(p => {
+      checkY(12);
+      const rColor = p.rating==='safe'?[34,197,94]:p.rating==='caution'?[245,158,11]:[239,68,68];
+      const rLabel = p.rating==='safe'?'✓ Safe':p.rating==='caution'?'⚠ Caution':'✕ Avoid';
+      doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(...dark);
+      doc.text(p.name, 18, y);
+      doc.setFont('helvetica','bold'); doc.setTextColor(...rColor);
+      doc.text(rLabel, 150, y);
+      doc.setFont('helvetica','normal'); doc.setTextColor(...gray); doc.setFontSize(8);
+      doc.text(p.note||'', 18, y+5);
+      y += 12;
+    });
+  }
+
+  /* ── Footer on every page ── */
+  const pageCount = doc.internal.getNumberOfPages();
+  for (let i=1; i<=pageCount; i++) {
+    doc.setPage(i);
+    doc.setFillColor(...pc);
+    doc.rect(0, 287, 210, 10, 'F');
+    doc.setTextColor(255,255,255); doc.setFontSize(7); doc.setFont('helvetica','normal');
+    doc.text(`EczemaEase — ${profile.name}'s Skin Report — ${today}`, 14, 293);
+    doc.text(`Page ${i} of ${pageCount}`, 185, 293, {align:'right'});
+  }
+
+  doc.save(`EczemaEase_${profile.name}_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+};
+
+/* ═══════════════════════════════════════════
+   ROOT APP
+═══════════════════════════════════════════ */
+const TABS = [
+  {id:'home',      label:'Home',      emoji:'🏠'},
+  {id:'track',     label:'Track',     emoji:'📊'},
+  {id:'scan',      label:'Scan',      emoji:'🔍'},
+  {id:'appts',     label:'Appts',     emoji:'📅'},
+  {id:'community', label:'Community', emoji:'👥'},
+  {id:'chat',      label:'Chat',      emoji:'💬'},
+];
+
+
+const App = () => {
+  const [profiles,       setProfiles]       = useState(SEED_PROFILES);
+  const [activeId,       setActiveId]       = useState(1);
+  const [tab,            setTab]            = useState('home');
+  const [showSwitcher,   setShowSwitcher]   = useState(false);
+  const [showForm,       setShowForm]       = useState(false);
+  const [editingProfile, setEditingProfile] = useState(null);
+
+  const activeProfile = profiles.find(p=>p.id===activeId) || profiles[0];
+  const pc = activeProfile.color;
+
+  const updateActiveProfile = updater => {
+    setProfiles(prev=>prev.map(p=>p.id===activeId?updater(p):p));
+  };
+
+  const addLog = log => {
+    updateActiveProfile(p=>({
+      ...p,
+      logs:[{...log,id:Date.now(),date:new Date().toISOString().split('T')[0]},...p.logs]
+    }));
+  };
+
+  const handleSaveProfile = data => {
+    if (editingProfile) {
+      setProfiles(prev=>prev.map(p=>p.id===editingProfile.id?{...p,...data}:p));
+    } else {
+      const newP = {...data, id:Date.now(), logs:[], appointments:[], savedProducts:[]};
+      setProfiles(prev=>[...prev,newP]);
+      setActiveId(newP.id);
+    }
+    setShowForm(false);
+    setEditingProfile(null);
+    setShowSwitcher(false);
+  };
+
+  const handleDeleteProfile = () => {
+    if(profiles.length<=1) return;
+    const remaining = profiles.filter(p=>p.id!==editingProfile.id);
+    setProfiles(remaining);
+    if(activeId===editingProfile.id) setActiveId(remaining[0].id);
+    setShowForm(false);
+    setEditingProfile(null);
+  };
+
+  const openEdit = profile => {
+    setEditingProfile(profile);
+    setShowForm(true);
+    setShowSwitcher(false);
+  };
+
+  const openAdd = () => {
+    setEditingProfile(null);
+    setShowForm(true);
+    setShowSwitcher(false);
+  };
+
+  const headerBg = `linear-gradient(135deg,${pc} 0%,${pc}BB 100%)`;
+
+  return (
+    <div className="app-shell">
+
+      {/* ── DYNAMIC HEADER ── */}
+      <div style={{background:headerBg}} className="px-5 pt-11 pb-4">
+        {tab === 'home' ? (
+          <div className="flex justify-between items-center">
+            <div>
+              <p className="text-white/70 text-sm">Managing eczema for</p>
+              <h1 className="text-white text-2xl font-bold">{activeProfile.name} {activeProfile.emoji}</h1>
+              <p className="text-white/60 text-xs mt-0.5">{activeProfile.relationship} · {activeProfile.age}</p>
+            </div>
+            {/* Profile switcher button */}
+            <button onClick={()=>setShowSwitcher(true)} className="flex flex-col items-center gap-0.5 active:scale-95">
+              <div className="relative w-13 h-13 flex items-center justify-center">
+                <div className="w-12 h-12 rounded-full flex items-center justify-center text-2xl border-2 border-white/60"
+                  style={{background:'rgba(255,255,255,0.2)'}}>
+                  {activeProfile.emoji}
+                </div>
+                {/* Profile count badge */}
+                {profiles.length > 1 && (
+                  <div className="absolute -top-1 -right-1 w-5 h-5 bg-white rounded-full flex items-center justify-center text-xs font-black"
+                    style={{color:pc}}>
+                    {profiles.length}
+                  </div>
+                )}
+              </div>
+              <span className="text-white/60 text-xs font-medium">Switch</span>
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full flex items-center justify-center text-xl border-2 border-white/30"
+                style={{background:'rgba(255,255,255,0.2)'}}>
+                {tab==='chat'?'🤖':TABS.find(t=>t.id===tab)?.emoji}
+              </div>
+              <div>
+                <div className="text-white font-bold text-lg">
+                  {tab==='chat'?'Eczema Assistant':TABS.find(t=>t.id===tab)?.label}
+                </div>
+                <div className="text-white/60 text-xs flex items-center gap-1.5">
+                  {tab==='chat'&&<div className="w-1.5 h-1.5 bg-green-400 rounded-full"/>}
+                  {tab==='chat'?'Online':''}
+                  {tab!=='chat'&&`${activeProfile.name}'s tracker`}
+                </div>
+              </div>
+            </div>
+            {/* Mini profile switcher */}
+            <button onClick={()=>setShowSwitcher(true)} className="flex items-center gap-2 active:scale-95">
+              <div className="text-right">
+                <div className="text-white text-xs font-semibold">{activeProfile.name}</div>
+                {profiles.length > 1 && (
+                  <div className="text-white/60 text-xs">{profiles.length} profiles</div>
+                )}
+              </div>
+              <div className="relative">
+                <div className="w-10 h-10 rounded-full flex items-center justify-center text-xl border-2 border-white/40"
+                  style={{background:'rgba(255,255,255,0.2)'}}>
+                  {activeProfile.emoji}
+                </div>
+                {profiles.length > 1 && (
+                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-white rounded-full flex items-center justify-center text-xs font-black"
+                    style={{color:pc,fontSize:9}}>
+                    {profiles.length}
+                  </div>
+                )}
+              </div>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* ── CONTENT ── */}
+      <div className="overflow-y-auto" style={{maxHeight:'calc(100vh - 65px)'}}>
+        {tab==='home'  && <Dashboard    key={activeId} profile={activeProfile} onQuickLog={()=>setTab('track')} />}
+        {tab==='track' && <Track        key={activeId} profile={activeProfile} onSave={addLog} />}
+        {tab==='scan'  && <Scan         key={activeId} profile={activeProfile} onUpdateProfile={updateActiveProfile} />}
+        {tab==='appts' && <Appointments key={activeId} profile={activeProfile} onUpdateProfile={updateActiveProfile} />}
+                {tab==='community' && <Community key={activeId} profile={activeProfile} />}
+        {tab==='chat'      && <Chat      key={activeId} profile={activeProfile} />}
+
+      </div>
+
+      {/* ── BOTTOM NAV ── */}
+      <div className="fixed bottom-0 z-30 flex"
+        style={{left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:430,
+          background:'rgba(255,255,255,0.97)',backdropFilter:'blur(16px)',
+          borderTop:'1px solid #f0f0f0',boxShadow:'0 -4px 24px rgba(0,0,0,0.08)',
+          padding:'6px 6px 12px'}}>
+        {TABS.map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)}
+            className="flex-1 flex flex-col items-center py-1.5 rounded-2xl transition-all"
+            style={tab===t.id?{background:pc+'18'}:{}}>
+            <span style={{fontSize:22}}>{t.emoji}</span>
+            <span style={{fontSize:10,marginTop:2,fontWeight:700,color:tab===t.id?pc:'#9CA3AF'}}>
+              {t.label}
+            </span>
+            {tab===t.id && (
+              <div className="w-1 h-1 rounded-full mt-0.5" style={{background:pc}} />
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* ── PROFILE SWITCHER SHEET ── */}
+      {showSwitcher && (
+        <ProfileSwitcherSheet
+          profiles={profiles}
+          activeId={activeId}
+          onSwitch={id=>{setActiveId(id);setShowSwitcher(false);}}
+          onAdd={openAdd}
+          onEdit={openEdit}
+          onClose={()=>setShowSwitcher(false)}
+        />
+      )}
+
+      {/* ── PROFILE FORM (Add / Edit) ── */}
+      {showForm && (
+        <ProfileForm
+          profile={editingProfile}
+          onSave={handleSaveProfile}
+          onCancel={()=>{setShowForm(false);setEditingProfile(null);}}
+          onDelete={handleDeleteProfile}
+          isOnlyProfile={profiles.length<=1}
+        />
+      )}
+    </div>
+  );
+};
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
